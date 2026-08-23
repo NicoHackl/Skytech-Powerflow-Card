@@ -27,6 +27,10 @@ Dinge, die schon einmal Zeit gekostet haben:
   während sich ein Gerät in den Attributen ändert. Wer die Änderungserkennung nur auf `state`
   aufbaut, verschläft solche Zyklen. Deshalb zählt für diese eine Entität zusätzlich
   `last_cycle_at` (`src/contract.ts`).
+- **Ohne Release findet HACS die Karte nicht.** `dist/` ist nicht eingecheckt (D-005), also gibt
+  es die Datei nur als Release-Anhang. Ein Stand, der bloß auf `main` liegt, führt zu
+  *„Repository structure for main is not compliant"* — es fehlt der Tag, nicht der Code.
+  Ablauf: [git-workflow.md](git-workflow.md#release).
 - **Die Karte darf nicht bei jeder Zustandsänderung rendern.** Der `hass`-Setter feuert für jede
   Entität im ganzen Haus. Ohne die Prüfung gegen die abonnierte Menge sind das Dutzende
   Renderläufe je Sekunde.

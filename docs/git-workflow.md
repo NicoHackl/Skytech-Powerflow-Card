@@ -67,6 +67,15 @@ Versionsstand wird gepflegt in: package.json
 3. Commit `chore(release): Version X.Y.Z`
 4. Tag setzen: `git tag -a vX.Y.Z -m "Version X.Y.Z"` und pushen: `git push --tags`
 
+Der Tag ist nicht nur eine Markierung: `.github/workflows/release.yaml` baut daraufhin die Karte
+und hängt `dist/skytech-power-flow-card.js` an das GitHub-Release. **HACS lädt genau diesen
+Anhang** — deshalb ist `dist/` bewusst nicht eingecheckt (D-005).
+
+Daraus folgt eine Falle: **ohne Release kann HACS die Karte nicht installieren.** Es sucht die
+Datei nur im Release-Anhang, in `dist/` oder in der Repo-Wurzel; findet es nichts, meldet es
+*„Repository structure for main is not compliant"*. Ein Stand, der nur als Commit auf `main`
+liegt, reicht nicht — es braucht den Tag.
+
 ## Was nie passiert
 
 - Kein `git push --force` auf gemeinsam genutzte Branches
