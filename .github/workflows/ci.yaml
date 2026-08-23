@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, claude/main]
+  pull_request:
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Typen prüfen
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # HACS liefert genau eine Datei aus (D-005). Bricht das Bundle in
+      # mehrere Dateien auf, fällt es hier auf und nicht erst beim Nutzer.
+      - name: Genau eine Datei in dist/
+        run: |
+          anzahl=$(find dist -type f | wc -l)
+          if [ "$anzahl" -ne 1 ]; then
+            echo "dist/ enthält $anzahl Dateien, erwartet wird genau eine:"
+            find dist -type f
+            exit 1
+          fi
