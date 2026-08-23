@@ -37,7 +37,11 @@ Formulierung und Format der sichtbaren Texte: [nutzertexte.md](nutzertexte.md).
 
 | Datenart | Wird verarbeitet? | Wo gespeichert | Löschfrist |
 |---|---|---|---|
-| <z. B. E-Mail> | ja/nein | <…> | <…> |
+| Personenbezogene Daten jeder Art | nein | – | – |
+
+Die Karte liest ausschließlich Leistungs- und Zustandswerte einer Anlage aus `hass.states` und
+zeichnet sie. Sie speichert nichts: kein `localStorage`, kein Cookie, keine Datei. Nach einem
+Neuladen ist ihr gesamter Zustand wieder aus Home Assistant aufgebaut.
 
 Grundsatz Datenminimierung: Was nicht erhoben wird, kann nicht verloren gehen.
 
@@ -45,7 +49,12 @@ Grundsatz Datenminimierung: Was nicht erhoben wird, kann nicht verloren gehen.
 
 | Dienst | Welche Daten gehen dorthin | Warum nötig |
 |---|---|---|
-| <…> | <…> | <…> |
+| keiner | – | – |
+
+Die Karte macht **keinen einzigen Netzwerkaufruf**: kein HTTP, kein WebSocket, kein CDN, keine
+Schriftart und kein Bild von außen. Alles, was sie zeichnet, kommt aus `hass.states`, das das
+Frontend ohnehin schon hält. Ein neuer externer Aufruf wäre eine Design-Entscheidung — und würde
+eine der Zusagen brechen, für die es dieses Projekt gibt.
 
 Ein neuer externer Dienst ist eine Design-Entscheidung → Eintrag in
 [design-entscheidungen.md](design-entscheidungen.md), inklusive der Frage, welche Daten das Haus

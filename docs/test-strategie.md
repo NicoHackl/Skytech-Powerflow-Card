@@ -14,12 +14,21 @@ Beides muss vor jedem Commit fehlerfrei durchlaufen — siehe [git-workflow.md](
 
 | Art | Umfang | Ort |
 |---|---|---|
-| Unit | Eine Funktion oder Klasse, keine externen Zugriffe | `tests/unit/` |
-| Integration | Zusammenspiel mehrerer Komponenten, echtes Schema | `tests/integration/` |
+| Unit | Eine reine Stufe, keine externen Zugriffe | `test/<modul>.test.ts` |
+| Vertrag | Die Nutzlast des HEMS wird so gelesen, wie `kontrakt.md` sie beschreibt | `test/contract.test.ts` |
 | Regression | Ein konkret aufgetretener Bug, damit er nicht wiederkehrt | beim jeweiligen Modul |
 
-Die Teststruktur spiegelt die Struktur des Quellcodes. Zu `src/planer/rechner.*`
-gehört `tests/unit/planer/test_rechner.*`.
+Die Teststruktur spiegelt die Struktur des Quellcodes: zu `src/power.ts` gehört
+`test/power.test.ts`.
+
+**Getestet wird ohne DOM und ohne HA-Attrappe.** `contract.ts` und `power.ts` bekommen ein
+schlichtes Objekt in der Form von `hass.states` gestellt; `balance.ts` und `layout.ts` rechnen
+ohnehin auf Zahlen. Genau dafür sind die Stufen rein.
+
+**Die Renderstufe hat bewusst keine automatisierten Tests.** Sie wird über `tsc --noEmit` und die
+Sichtprüfung aus [design-system.md](design-system.md) abgesichert. Ein Test, der SVG-Markup gegen
+eine erwartete Zeichenkette prüft, bricht bei jeder Formatierung und beweist nichts über das,
+worauf es ankommt: Lesbarkeit, Kontrast und Bewegung.
 
 ## Pflicht-Testfälle
 
@@ -48,22 +57,47 @@ nachweislich fehlschlagen.
   Externe Dienste werden gemockt.
 - Tests sind reihenfolgeunabhängig und hinterlassen keinen Zustand.
 - Keine `sleep`-Aufrufe zur Synchronisierung — sie sind langsam und trotzdem instabil.
-- Ein Test prüft **eine** Aussage. Der Testname beschreibt sie:
-  `test_berechnet_null_bei_leerer_geraeteliste`.
-- Testdaten liegen als Fixture vor und werden nicht von Hand editiert, wenn sie generiert werden.
+- Ein Test prüft **eine** Aussage. Der Testname beschreibt sie auf Deutsch und in ganzen Worten:
+  `test('unavailable wird nicht zu 0, sondern zu unbekannt')`.
+- Keine Zeitabhängigkeit ohne übergebenen Zeitpunkt.
+- Testdaten stehen als Hilfsfunktion im Testmodul, nicht als kopierte Objektliterale in jedem
+  einzelnen Test.
 
-## Coverage
+## Was mindestens abgedeckt sein muss
 
-Zielwert: **die reinen Stufen vollstaendig**. Coverage ist ein Warnsignal, kein Ziel an sich — 100 % Coverage
-ohne Zusicherungen im Test ist wertlos. Ungetestet bleiben dürfen generierte Dateien und triviale
-Getter.
+Coverage ist ein Warnsignal, kein Ziel an sich. Diese Aussagen müssen aber belegt sein, weil an
+ihnen die Lesbarkeit der Karte hängt:
 
-## Fixtures
+**`power.test.ts`** — je `power_kind` Normalfall, Fehlerfall und Leerfall, dazu:
 
-<Wie Testdaten entstehen. Falls generiert, hier der Befehl:>
+- `unavailable` wird nicht zu `0`, sondern zu unbekannt
+- der Rückfallwert aus der Statusentität greift, wenn der Direktwert fehlt
+- ein unbekannter `power_kind` ergibt unbekannt statt Fehler
+- ein ausgefallener PV-Sensor macht die Summe unbekannt, nicht kleiner
 
-```bash
-<generator-befehl>
-```
+**`balance.test.ts`**
 
-Generierte Fixtures werden nie von Hand bearbeitet — sonst weicht der Test vom echten Schema ab.
+- die Hausleistung wird gerechnet, wenn kein Hausensor gesetzt ist
+- eine negative Hausbilanz wird auf `0` geklemmt **und gemeldet**
+- die Gerätesumme wird proportional auf die Hausleistung gedeckelt
+- unbekannte Geräte zählen mit `0` in die Summe, bleiben aber Knoten
+- Kanten mit Wert `0` entstehen nicht
+
+**`layout.test.ts`**
+
+- 0, 1, 5 und 12 Geräte erzeugen überschneidungsfreie Knoten
+- ab 7 Geräten entstehen zwei Spalten
+- ein fehlender Knoten hinterlässt kein Loch
+
+**`contract.test.ts`**
+
+- eine höhere `schema_version` wird gemeldet, nicht geraten
+- eine fehlende Statusentität ist kein Fehler
+- ein neuer Zyklus löst Rendern aus, auch wenn `pool_w` gleich bleibt
+
+## Was nur von Hand prüfbar ist
+
+Diese Punkte verlangen eine laufende HA-Instanz und stehen deshalb in
+[bekannte-luecken.md](bekannte-luecken.md), bis sie geprüft sind: gestopptes Add-on, Neustart von
+Home Assistant, helles und dunkles Theme, ein Theme mit abweichenden `--energy-*`-Farben,
+`prefers-reduced-motion`, Tastaturbedienung und Bildschirmleserausgabe.

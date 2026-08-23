@@ -4,29 +4,45 @@
 etwas in [architektur.md](architektur.md), heißt das nicht, dass es implementiert ist — hier steht,
 wo nicht.
 
-## Abweichungen Spec ↔ Code
+## Ungeprüft, nicht unfertig
 
-| Thema | Doku sagt | Code macht | Folge für die Arbeit |
-|---|---|---|---|
-| <…> | <…> | <…> | <worauf zu achten ist> |
+Der Code läuft gegen Tests und einen synthetischen HA-Zustand. **An einer laufenden
+Home-Assistant-Instanz ist er nicht erprobt.** Die folgenden Zusagen sind gebaut, aber nicht
+belegt — sie werden nicht als erfüllt gemeldet, bis sie geprüft sind:
+
+| Thema | Was zugesagt ist | Warum ungeprüft |
+|---|---|---|
+| Gestopptes Add-on | Die Karte zeichnet aus den HA-Entitäten weiter und zeigt „HEMS-Daten veraltet" | Verlangt ein laufendes Add-on, das man anhalten kann |
+| Neustart von Home Assistant | Die Karte zeigt kurz ihren Klartexthinweis und kommt von selbst zurück, sobald das HEMS die Konfigurationsentität neu geschrieben hat | Verlangt einen echten HA-Neustart |
+| Themes | Helles und dunkles Theme, dazu mindestens ein Theme mit abweichenden `--energy-*`-Farben | Verlangt eine laufende Oberfläche |
+| `prefers-reduced-motion` | Nichts bewegt sich, die Flussrichtung bleibt an den Pfeilspitzen ablesbar | Nur im Browser prüfbar |
+| Tastatur und Bildschirmleser | Jeder anklickbare Knoten ist erreichbar und trägt eine sprechende Beschreibung | Nur mit echter Vorlesesoftware prüfbar |
+| `<ha-icon>` im `<foreignObject>` | Symbole erscheinen mittig im Knoten | Das Element gibt es nur im HA-Frontend |
 
 ## Stolpersteine
 
 Dinge, die schon einmal Zeit gekostet haben:
 
-- **<Kurzer Titel>** — <was passiert, woran man es erkennt, wie man es umgeht>
+- **Der Zustand der Statusentität ist `pool_w`, nicht ihre Nutzlast.** Er kann gleich bleiben,
+  während sich ein Gerät in den Attributen ändert. Wer die Änderungserkennung nur auf `state`
+  aufbaut, verschläft solche Zyklen. Deshalb zählt für diese eine Entität zusätzlich
+  `last_cycle_at` (`src/contract.ts`).
+- **Die Karte darf nicht bei jeder Zustandsänderung rendern.** Der `hass`-Setter feuert für jede
+  Entität im ganzen Haus. Ohne die Prüfung gegen die abonnierte Menge sind das Dutzende
+  Renderläufe je Sekunde.
 
 ## Offene Bugs
 
-| ID | Beschreibung | Auswirkung | Umgehung |
-|---|---|---|---|
-| <…> | <…> | <…> | <…> |
+Keine bekannt.
 
 ## Bewusst nicht umgesetzt
 
 | Thema | Warum nicht | Verweis |
 |---|---|---|
-| <…> | <…> | D-xxx |
+| Eigener Hell/Dunkel-Schalter | Die Karte sitzt in einem fremden Dashboard, das seinen Schalter schon hat | D-006 |
+| React statt Lit | Eine zweite Rendering-Bibliothek in einem fremden Frontend, für ein einzelnes Custom Element | D-005 |
+| Konfigurationsoberfläche für Anlagenwerte und Geräte | Zweite Pflegestelle, zweite Wahrheit — das ist Aufgabe des HEMS-Panels | [architektur.md](architektur.md#zweck-und-abgrenzung) |
+| Sourcemap im Release | HACS liefert genau eine Datei aus; eine nicht mitgelieferte Karte wäre totes Gewicht | D-005 |
 
 ---
 

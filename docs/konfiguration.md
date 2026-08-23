@@ -1,34 +1,53 @@
 # Konfiguration
 
-## Umgebungsvariablen
+Die Karte hat **keine Umgebungsvariablen, keine Konfigurationsdatei und keine Secrets**. Sie läuft
+im Browser im Home-Assistant-Frontend.
 
-| Variable | Pflicht | Default | Bedeutung |
-|---|---|---|---|
-| `<NAME>` | ja | — | <…> |
-| `<NAME>` | nein | `<wert>` | <…> |
+## Was im Dashboard steht
 
-Vorlage für lokale Werte: `.env.example` (eingecheckt).
-Die echte `.env` ist in `.gitignore` und wird **nie** committet.
+Alle drei Felder sind optional. Im Regelfall steht nur die erste Zeile da:
 
-## Konfigurationsdateien
+```yaml
+type: custom:skytech-power-flow-card
+config_entity: sensor.skytech_hems_flow_config   # Standard
+status_entity: sensor.skytech_hems_flow_status   # Standard
+title: "Leistungsfluss"                          # überschreibt die Überschrift aus dem HEMS
+```
 
-| Datei | Zweck | Eingecheckt |
-|---|---|---|
-| `package.json` | Version und Metadaten | ja |
-| `.env.example` | Vorlage ohne echte Werte | ja |
-| `.env` | Lokale Werte, enthält Secrets | **nein** |
+| Feld | Wirkung |
+|---|---|
+| `config_entity` | Andere Konfigurationsentität. Nur nötig, wenn mehrere HEMS-Instanzen in einer HA-Installation laufen |
+| `status_entity` | Analog für den Status |
+| `title` | Überschreibt `anzeige.titel` aus dem Vertrag. Leerer String heißt: keine Überschrift |
 
-## Secrets
+Ein leeres Feld wird vom Editor nicht gespeichert — eine Zeile ohne Wirkung gehört nicht ins
+Dashboard-YAML.
 
-- Secrets kommen ausschließlich aus Umgebungsvariablen oder einem Secret-Store — **nie** aus dem
-  Code, nie aus einer eingecheckten Datei.
-- Ein Secret taucht nie in Logs, Fehlermeldungen, Traces oder Commit-Messages auf.
-- Beim Start wird geprüft, ob alle Pflichtwerte gesetzt sind. Fehlt einer, bricht der Start mit
-  einer klaren deutschen Meldung ab — kein stiller Fallback auf einen Default.
-- Weitergehende Regeln: [sicherheit-datenschutz.md](sicherheit-datenschutz.md).
+## Was NICHT im Dashboard steht
 
-## Grundsatz
+Erzeugung, Netz, Hausleistung, Speicher, die Geräteliste, Symbole, Farben, Sichtbarkeit,
+Animation und die W/kW-Schwelle werden im **HEMS-Panel unter „Flow Card"** gepflegt. Sie hier
+noch einmal anzubieten wäre eine zweite Wahrheit, und die zweite veraltet zuerst.
 
-Alles, was sich zwischen Umgebungen unterscheidet (Pfade, Hosts, Zeitintervalle, Grenzwerte), ist
-konfigurierbar und hat einen sinnvollen Default. Fest verdrahtete Werte im Code sind ein Fehler,
-kein Feature.
+## Installation
+
+Über HACS oder von Hand als Lovelace-Ressource — beide Wege stehen in der
+[README](../README.md#installation).
+
+## Empfehlung: Recorder
+
+Die Statusentität ändert sich in jedem Regelzyklus. Solange keine Historie gewünscht ist, gehören
+beide Entitäten in die Ausschlussliste der Home-Assistant-Konfiguration:
+
+```yaml
+recorder:
+  exclude:
+    entities:
+      - sensor.skytech_hems_flow_config
+      - sensor.skytech_hems_flow_status
+```
+
+## Versionierung
+
+Die Version steht in `package.json`. Sie ist von der Add-on-Version des HEMS **entkoppelt**: der
+Datenvertrag ist die einzige Kopplung zwischen beiden Repositories, nicht die Versionsnummer.
