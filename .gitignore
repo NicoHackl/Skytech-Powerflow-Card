@@ -1,0 +1,15 @@
+# Abhängigkeiten
+node_modules/
+
+# Build-Ergebnis. Es wird NICHT eingecheckt: HACS und das GitHub-Release
+# liefern die gebaute Datei aus, nicht das Repository.
+dist/
+
+# Test- und Werkzeugausgaben
+coverage/
+*.tsbuildinfo
+
+# Lokale Umgebung
+.env
+.env.*
+.DS_Store
