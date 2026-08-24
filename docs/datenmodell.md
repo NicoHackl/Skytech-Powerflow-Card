@@ -66,9 +66,17 @@ ist der Zustand gemessen, nicht abwesend.
   seine Bedeutung oder Einheit.
 - `schema_version` höher als unterstützt → Hinweis statt Grafik. Es wird nicht geraten.
 
-So additiv ergänzt: `hems.interval_s`. Der Vertrag verlangte von der Karte die Regel „Statusdaten
-älter als 5 × Regelintervall", lieferte das Regelintervall aber nicht mit. Fehlt das Feld, nimmt
-die Karte 30 Sekunden an.
+So additiv ergänzt:
+
+- `hems.interval_s` — der Vertrag verlangte von der Karte die Regel „Statusdaten älter als
+  5 × Regelintervall", lieferte das Regelintervall aber nicht mit. Fehlt das Feld, nimmt die Karte
+  30 Sekunden an.
+- `standard.pv_detail_entities` — Erzeugungssensoren, die **nicht** summiert werden. Eine Anlage
+  hat oft einen Sensor für die Systemleistung und je einen für die Strings; beides zu summieren
+  verdoppelte die Erzeugung. Die Karte zeigt diese Zeilen als Aufschlüsselung unter dem
+  Erzeugungsknoten und rechnet sie nie in die Summe.
+- `anzeige.max_erwartete_leistung_w` — Obergrenze des Erwartungsbereichs für die
+  Punktgeschwindigkeit. Fehlt sie, nimmt die Karte 5000 W an.
 
 ## Migrationen
 

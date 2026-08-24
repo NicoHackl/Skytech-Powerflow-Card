@@ -1,10 +1,18 @@
 /* Geometrie: Knotenpositionen und Kantenpfade.
 
-   Reine Rechnerei ohne DOM — die Testbarkeit hängt daran. Der viewBox wird
-   aus der tatsächlichen Knotenzahl gebildet; `preserveAspectRatio` erledigt
-   die Skalierung, deshalb braucht die Karte keine Medienabfrage. */
+   Gerechnet wird in **Bildschirmpunkten**, nicht in einem skalierten
+   Koordinatensystem: die viewBox trägt genau die gemessene Kartenbreite. Nur
+   so bleibt 12-px-Text auch 12 px groß. Die Vorgängerfassung skalierte die
+   ganze Zeichnung auf die Kartenbreite und schrumpfte die Beschriftung dabei
+   auf 11,3 px.
+
+   Reine Rechnerei ohne DOM — die Testbarkeit hängt daran. */
 
 export type KnotenArt = 'pv' | 'netz' | 'haus' | 'batterie' | 'geraet' | 'rest' | 'verteiler'
+
+/** Wo die Beschriftung steht. Über dem Kreis in der obersten Reihe, damit sie
+    nicht zwischen Knoten und abgehender Linie liegt — wie im Vorbild. */
+export type BeschriftungsSeite = 'oben' | 'unten'
 
 export interface Knoten {
   id: string
@@ -12,14 +20,13 @@ export interface Knoten {
   x: number
   y: number
   r: number
+  beschriftung: BeschriftungsSeite
 }
 
 export interface Geometrie {
   breite: number
   hoehe: number
   knoten: Knoten[]
-  /** Schriftgröße der Beschriftung, schrumpft bei vielen Geräten. */
-  schrift: number
 }
 
 export interface LayoutEingabe {
@@ -28,104 +35,129 @@ export interface LayoutEingabe {
   batterie: boolean
   hausKnoten: boolean
   geraeteIds: string[]
-  /** Ein eigener Knoten für den nicht vom HEMS geregelten Rest. */
   rest: boolean
+  /** Gemessene Breite der Karte. Reicht sie nicht, rücken die Spalten enger. */
+  breite: number
 }
 
-const RADIUS_GROSS = 34
-const RADIUS_KLEIN = 26
-const SPALTE_X = 300
-const SPALTE_ABSTAND = 150
-const ZEILE_ABSTAND = 92
-const RAND = 60
+/* Feste Maße wie im Vorbild — nichts davon skaliert mit der Kartenbreite. */
+export const KNOTEN_R = 40
+export const SYMBOL_GROESSE = 24
+export const SCHRIFT = 12
+/** Höhe des Beschriftungsblocks über beziehungsweise unter dem Kreis. */
+export const BESCHRIFTUNG_H = 18
+export const ECKE = 22
+const RAND = 12
+const SPALTE_MAX = 150
+const SPALTE_MIN = 104
+/* Zeilenhöhe = Kreis + Beschriftung + Untertitel + Luft. Sie wird aus dem
+   tatsächlichen Textblock gerechnet, nicht geraten: die Vorgängerfassung setzte
+   sie fest auf 92 und schob damit jede Wertzeile in den nächsten Knoten. */
+const UNTERTITEL_H = 14
+const ZEILE = KNOTEN_R * 2 + BESCHRIFTUNG_H + UNTERTITEL_H + 12
 
-/** Ab hier zwei Spalten, ab `ENG_AB` zusätzlich kleinere Knoten und Schrift.
-    Es wird nie gescrollt und nie abgeschnitten. */
+/** Ab so vielen Geräten bricht die Geräteliste in eine zweite Spalte um. */
 const ZWEI_SPALTEN_AB = 7
-const ENG_AB = 13
 
 export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
-  const anzahl = eingabe.geraeteIds.length + (eingabe.rest ? 1 : 0)
-  const eng = anzahl >= ENG_AB
-  const radius = eng ? RADIUS_KLEIN : RADIUS_GROSS
-  const schrift = eng ? 11 : 13
+  const rechts = [...eingabe.geraeteIds, ...(eingabe.rest ? ['rest'] : [])]
+  const geraeteSpalten = rechts.length >= ZWEI_SPALTEN_AB ? 2 : 1
+  const proSpalte = Math.ceil(rechts.length / geraeteSpalten) || 0
+
+  /* Der Stamm trägt Erzeugung, Netz, Haus und Speicher. Fehlt einer davon,
+     rücken die übrigen zusammen — es entsteht kein Loch. */
+  const stammZeilen = (eingabe.pv ? 1 : 0) + 1 + (eingabe.batterie ? 1 : 0)
+  const zeilen = Math.max(stammZeilen, proSpalte, 1)
+
+  const spaltenAnzahl = 3 + (rechts.length ? geraeteSpalten : 0)
+  const spalte = spaltenBreite(eingabe.breite, spaltenAnzahl)
+
+  const x = (index: number) => RAND + KNOTEN_R + index * spalte
+  const breite = Math.max(eingabe.breite, x(spaltenAnzahl - 1) + KNOTEN_R + RAND)
+  const versatzX = Math.max(0, (breite - (x(spaltenAnzahl - 1) + KNOTEN_R + RAND)) / 2)
+
+  const oben = RAND + BESCHRIFTUNG_H
+  const y = (zeile: number) => oben + zeile * ZEILE + KNOTEN_R
 
   const knoten: Knoten[] = []
-
-  /* Die linke Hälfte trägt Erzeugung, Netz, Haus und Speicher. Fehlt einer
-     davon, rücken die übrigen zusammen — es entsteht kein Loch. */
-  const zeilen: KnotenArt[] = []
-  if (eingabe.pv) zeilen.push('pv')
-  zeilen.push(eingabe.hausKnoten ? 'haus' : 'verteiler')
-  if (eingabe.batterie) zeilen.push('batterie')
-
-  const mitteIndex = zeilen.indexOf(eingabe.hausKnoten ? 'haus' : 'verteiler')
-  const stammHoehe = (zeilen.length - 1) * ZEILE_ABSTAND
-  const stammY = RAND + radius
-
-  zeilen.forEach((art, index) => {
-    knoten.push({ id: art, art, x: SPALTE_X, y: stammY + index * ZEILE_ABSTAND, r: radius })
-  })
-
-  const mitteY = stammY + mitteIndex * ZEILE_ABSTAND
-  if (eingabe.netz) {
-    knoten.push({ id: 'netz', art: 'netz', x: SPALTE_X - SPALTE_ABSTAND, y: mitteY, r: radius })
+  const setze = (id: string, art: KnotenArt, spalteIndex: number, zeile: number) => {
+    knoten.push({
+      id, art,
+      x: x(spalteIndex) + versatzX,
+      y: y(zeile),
+      r: KNOTEN_R,
+      beschriftung: zeile === 0 ? 'oben' : 'unten',
+    })
   }
 
-  /* Die Geräte hängen rechts. Bis 6 Einträge eine Spalte, darüber zwei. */
-  const rechts: string[] = [...eingabe.geraeteIds]
-  if (eingabe.rest) rechts.push('rest')
-  const spalten = rechts.length >= ZWEI_SPALTEN_AB ? 2 : 1
-  const proSpalte = Math.ceil(rechts.length / spalten) || 1
+  // Kürzere Gruppe mittig zur längeren setzen, statt sie oben anzukleben.
+  const stammVersatz = Math.floor((zeilen - stammZeilen) / 2)
+  const geraeteVersatz = Math.floor((zeilen - proSpalte) / 2)
+
+  let zeile = stammVersatz
+  if (eingabe.pv) setze('pv', 'pv', 1, zeile++)
+  const mitteZeile = zeile
+  if (eingabe.netz) setze('netz', 'netz', 0, mitteZeile)
+  setze(eingabe.hausKnoten ? 'haus' : 'verteiler',
+    eingabe.hausKnoten ? 'haus' : 'verteiler', 2, mitteZeile)
+  zeile += 1
+  if (eingabe.batterie) setze('batterie', 'batterie', 1, zeile)
 
   rechts.forEach((id, index) => {
-    const spalte = Math.floor(index / proSpalte)
-    const zeile = index % proSpalte
-    knoten.push({
-      id,
-      art: id === 'rest' ? 'rest' : 'geraet',
-      x: SPALTE_X + SPALTE_ABSTAND + spalte * SPALTE_ABSTAND,
-      y: RAND + radius + zeile * ZEILE_ABSTAND,
-      r: radius,
-    })
+    const spalteIndex = 3 + Math.floor(index / proSpalte)
+    setze(id, id === 'rest' ? 'rest' : 'geraet', spalteIndex,
+      geraeteVersatz + (index % proSpalte))
   })
 
-  const geraeteHoehe = (proSpalte - 1) * ZEILE_ABSTAND
-  const hoehe = RAND * 2 + radius * 2 + Math.max(stammHoehe, rechts.length ? geraeteHoehe : 0) + 34
-  const rechteKante = SPALTE_X + SPALTE_ABSTAND * (rechts.length ? spalten : 0)
-  const breite = rechteKante + radius + RAND
+  const hoehe = oben + zeilen * ZEILE + BESCHRIFTUNG_H + RAND
+  return { breite, hoehe, knoten }
+}
 
-  return { breite, hoehe, knoten, schrift }
+/** Passt der Spaltenabstand nicht in die Karte, wird er enger — bis zu einer
+    Grenze, unter der sich die Kreise berühren würden. */
+function spaltenBreite(kartenBreite: number, spalten: number): number {
+  if (spalten <= 1) return SPALTE_MAX
+  const verfuegbar = kartenBreite - 2 * RAND - 2 * KNOTEN_R
+  const passend = verfuegbar / (spalten - 1)
+  return Math.max(SPALTE_MIN, Math.min(SPALTE_MAX, passend))
 }
 
 export function findeKnoten(geometrie: Geometrie, id: string): Knoten | undefined {
   return geometrie.knoten.find((knoten) => knoten.id === id)
 }
 
-/** Quadratische Bézierkurve zwischen zwei Knotenrändern.
+/** Rechtwinklige Führung mit **einer** gerundeten Ecke.
 
-    Der Kontrollpunkt sitzt auf halber Strecke senkrecht zur Verbindung,
-    damit sich Hin- und Rückrichtung zwischen denselben Knoten nicht
-    überlagern. */
-export function kantenPfad(von: Knoten, nach: Knoten, biegung = 0.16): string {
+    Senkrechter Stummel aus dem Knoten, Ecke, waagerechter Lauf in den
+    Zielknoten — dieselbe Form wie im Vorbild. Diagonalen gibt es nicht mehr:
+    sie kreuzten die Fläche zwischen den Spalten und ließen die Karte unruhig
+    wirken. Fluchten zwei Knoten, wird eine gerade Linie gezogen. */
+export function kantenPfad(von: Knoten, nach: Knoten): string {
   const dx = nach.x - von.x
   const dy = nach.y - von.y
-  const laenge = Math.hypot(dx, dy) || 1
-  const ex = dx / laenge
-  const ey = dy / laenge
 
-  const startX = von.x + ex * von.r
-  const startY = von.y + ey * von.r
-  const endeX = nach.x - ex * nach.r
-  const endeY = nach.y - ey * nach.r
+  if (Math.abs(dy) < 1) {
+    const richtung = Math.sign(dx) || 1
+    return `M ${r(von.x + richtung * von.r)} ${r(von.y)} `
+      + `H ${r(nach.x - richtung * nach.r)}`
+  }
 
-  const mitteX = (startX + endeX) / 2
-  const mitteY = (startY + endeY) / 2
-  const versatz = laenge * biegung
-  const kontrollX = mitteX - ey * versatz
-  const kontrollY = mitteY + ex * versatz
+  if (Math.abs(dx) < 1) {
+    const richtung = Math.sign(dy) || 1
+    return `M ${r(von.x)} ${r(von.y + richtung * von.r)} `
+      + `V ${r(nach.y - richtung * nach.r)}`
+  }
 
-  return `M ${r(startX)} ${r(startY)} Q ${r(kontrollX)} ${r(kontrollY)} ${r(endeX)} ${r(endeY)}`
+  const hoch = Math.sign(dy)
+  const seite = Math.sign(dx)
+  const startY = von.y + hoch * von.r
+  const zielX = nach.x - seite * nach.r
+  const ecke = Math.min(ECKE, Math.abs(nach.y - startY), Math.abs(zielX - von.x))
+
+  return `M ${r(von.x)} ${r(startY)} `
+    + `V ${r(nach.y - hoch * ecke)} `
+    + `Q ${r(von.x)} ${r(nach.y)} ${r(von.x + seite * ecke)} ${r(nach.y)} `
+    + `H ${r(zielX)}`
 }
 
 function r(wert: number): number {

@@ -12,9 +12,15 @@ import {
   batterieLeistung, geraeteLeistung, hausLeistung, ladestand, netzLeistung, pvLeistung,
   type Aufloesung,
 } from './power'
-import { berechneBilanz, fliesst, type Bilanz, type Hinweis } from './balance'
-import { baueGeometrie, findeKnoten, type Geometrie, type Knoten } from './layout'
-import { akzentRing, pfeilDefinition, socRing, zeichneKante, type Kante } from './flow-svg'
+import { berechneBilanz, type Bilanz, type Hinweis } from './balance'
+import {
+  baueGeometrie, findeKnoten, BESCHRIFTUNG_H, SYMBOL_GROESSE,
+  type Geometrie, type Knoten,
+} from './layout'
+import {
+  akzentRing, hausRing, richtungsPfeil, socRing, zeichneKante,
+  type HausAnteil, type Kante,
+} from './flow-svg'
 import { leistung, leistungGesprochen, prozent, uhrzeit, UNBEKANNT_TEXT } from './format'
 import './editor'
 
@@ -29,6 +35,29 @@ const STANDARD_SCHWELLE = 1000
 const STANDARD_INTERVALL_S = 30
 /** Ab dem Fünffachen des Regelintervalls gelten die Statusdaten als alt. */
 const VERALTET_FAKTOR = 5
+
+/** Obergrenze des Erwartungsbereichs für die Punktgeschwindigkeit, wenn der
+    Vertrag keine nennt. */
+const STANDARD_MAX_LEISTUNG_W = 5000
+
+/** Breite, mit der gerechnet wird, bevor der ResizeObserver gemessen hat. */
+const STANDARD_BREITE = 480
+
+/** Zusammenfassungsfenster fürs Rendern. Die abonnierten Sensoren ändern sich
+    mehrmals pro Sekunde; ohne dieses Fenster rechnet und zeichnet die Karte
+    genauso oft, und die Zahlen flackern unlesbar. */
+const RENDER_FENSTER_MS = 1000
+
+/** Mittlere Zeichenbreite bei 12 px. Grundlage für das Kürzen der
+    Beschriftung — SVG-Text kann nicht von selbst auslassen. */
+const ZEICHEN_BREITE = 6.4
+
+/** So viele Erzeugungszeilen passen unter den Knoten. */
+const PV_DETAIL_MAX = 2
+
+const GERAETE_FARBEN = [
+  '--spfc-geraet-1', '--spfc-geraet-2', '--spfc-geraet-3', '--spfc-geraet-4',
+]
 
 const SYMBOLE: Record<string, string> = {
   pv: 'mdi:solar-power-variant',
@@ -48,6 +77,7 @@ export class SkytechPowerFlowCard extends LitElement {
   static override properties = {
     _vertrag: { state: true },
     _jetzt: { state: true },
+    _breite: { state: true },
   }
 
   private _config: CardConfig = { type: 'custom:skytech-power-flow-card' }
@@ -56,14 +86,18 @@ export class SkytechPowerFlowCard extends LitElement {
   private _abzug: Record<string, string> = {}
   private _revision = ''
   private _uhr?: ReturnType<typeof setInterval>
+  private _beobachter?: ResizeObserver
+  private _renderTimer?: ReturnType<typeof setTimeout>
 
   declare _vertrag: Vertrag
   declare _jetzt: number
+  declare _breite: number
 
   constructor() {
     super()
     this._vertrag = { config: null, status: null, fehler: { art: 'keine_daten' } }
     this._jetzt = Date.now()
+    this._breite = STANDARD_BREITE
   }
 
   /* ---------------------------------------------------------------------
@@ -114,11 +148,26 @@ export class SkytechPowerFlowCard extends LitElement {
     // Nur für das Abzeichen „HEMS-Daten veraltet": es wird allein durch
     // Zeitablauf wahr, ohne dass sich eine Entität ändert.
     this._uhr = setInterval(() => { this._jetzt = Date.now() }, 30_000)
+
+    // Die Karte rechnet in Bildschirmpunkten. Dazu muss sie wissen, wie breit
+    // sie tatsächlich ist — eine Medienabfrage kennt nur das Fenster, nicht
+    // die Spalte, in der die Karte steht.
+    if (typeof ResizeObserver !== 'undefined') {
+      this._beobachter = new ResizeObserver((eintraege) => {
+        const breite = Math.round(eintraege[0]?.contentRect.width ?? 0)
+        if (breite > 0 && Math.abs(breite - this._breite) > 2) this._breite = breite
+      })
+      this._beobachter.observe(this)
+    }
   }
 
   override disconnectedCallback(): void {
     if (this._uhr) clearInterval(this._uhr)
     this._uhr = undefined
+    if (this._renderTimer) clearTimeout(this._renderTimer)
+    this._renderTimer = undefined
+    this._beobachter?.disconnect()
+    this._beobachter = undefined
     super.disconnectedCallback()
   }
 
@@ -144,7 +193,24 @@ export class SkytechPowerFlowCard extends LitElement {
     }
 
     if (!hatSichGeaendert(this._entitaeten, this._abzug, hass, statusEntity)) return
-    this._neuLesen(configEntity, statusEntity)
+
+    // Eine neue Revision heißt: ein Gerät kam dazu oder fiel weg. Das darf
+    // nicht bis zu einer Sekunde warten.
+    const revision = (this._hass?.states[configEntity]?.attributes as FlowConfig | undefined)
+      ?.revision ?? ''
+    if (revision !== this._revision) {
+      this._neuLesen(configEntity, statusEntity)
+      return
+    }
+
+    // Sonst wird zusammengefasst: die abonnierten Sensoren ändern sich
+    // mehrmals pro Sekunde, und jede Änderung einzeln zu zeichnen macht die
+    // Zahlen unlesbar und lässt die Punkte springen.
+    if (this._renderTimer) return
+    this._renderTimer = setTimeout(() => {
+      this._renderTimer = undefined
+      this._neuLesen(this._configEntity(), this._statusEntity())
+    }, RENDER_FENSTER_MS)
   }
 
   private _neuLesen(configEntity: string, statusEntity: string): void {
@@ -169,6 +235,7 @@ export class SkytechPowerFlowCard extends LitElement {
     return this._config.status_entity || STANDARD_STATUS_ENTITY
   }
 
+
   /* ---------------------------------------------------------------------
      Render
      --------------------------------------------------------------------- */
@@ -191,13 +258,12 @@ export class SkytechPowerFlowCard extends LitElement {
   }
 
   private _renderHinweis(fehler: VertragsFehler | null): TemplateResult {
-    const text = this._hinweisText(fehler)
     return html`
       <ha-card>
         <div class="kopf">
           <span class="titel">${this._config.title || 'Leistungsfluss'}</span>
         </div>
-        <div class="hinweis">${text}</div>
+        <div class="hinweis">${this._hinweisText(fehler)}</div>
       </ha-card>
     `
   }
@@ -241,7 +307,7 @@ export class SkytechPowerFlowCard extends LitElement {
     if (!titel && abzeichen.length === 0) return html``
     return html`
       <div class="kopf">
-        ${titel ? html`<span class="titel">${titel}</span>` : html`<span class="titel"></span>`}
+        <span class="titel">${titel}</span>
         ${abzeichen.map((eintrag) => html`
           <span class=${`abzeichen${eintrag.warnung ? ' warnung' : ''}`}>${eintrag.text}</span>
         `)}
@@ -249,10 +315,10 @@ export class SkytechPowerFlowCard extends LitElement {
     `
   }
 
-  /** Der Status gilt als alt, wenn die Entität länger nicht mehr
-      aktualisiert wurde als das Fünffache des Regelintervalls. Gemessen wird
-      an `last_updated` der Entität, nicht am Zeitstempel im Text: der ist
-      für Menschen formatiert, nicht zum Rechnen. */
+  /** Der Status gilt als alt, wenn die Entität länger nicht mehr aktualisiert
+      wurde als das Fünffache des Regelintervalls. Gemessen wird an
+      `last_updated` der Entität, nicht am Zeitstempel im Text: der ist für
+      Menschen formatiert, nicht zum Rechnen. */
   private _veraltet(config: FlowConfig): boolean {
     const entity = this._hass?.states[this._statusEntity()]
     const marke = entity?.last_updated ?? entity?.last_changed
@@ -299,11 +365,12 @@ export class SkytechPowerFlowCard extends LitElement {
       hausKnoten,
       geraeteIds: devices.map((device) => device.id),
       rest: bilanz.uebrigesHaus > 0,
+      breite: this._breite,
     })
 
     const kanten = this._kanten(geometrie, bilanz, schwelle, hausKnoten)
-    const maximalfluss = kanten.reduce((groesster, kante) => Math.max(groesster, kante.wert), 0)
     const animation = anzeige.animation !== false
+    const maxLeistung = anzeige.max_erwartete_leistung_w ?? STANDARD_MAX_LEISTUNG_W
 
     return html`
       <svg
@@ -312,15 +379,18 @@ export class SkytechPowerFlowCard extends LitElement {
         role="img"
         aria-label=${this._zusammenfassung(bilanz, schwelle)}
       >
-        ${pfeilDefinition()}
-        ${kanten.map((kante, index) => zeichneKante(kante, maximalfluss, animation, index))}
+        ${kanten.map((kante, index) =>
+          zeichneKante(kante, animation, schwelle, maxLeistung, index))}
         ${this._knoten(geometrie, config, status, bilanz, schwelle)}
       </svg>
     `
   }
 
-  /** Nur Kanten, die tatsächlich fließen. Kein Strich, kein Punkt, keine
-      Beschriftung für einen Wert von `0` oder `null`. */
+  /** Alle Kanten der Anlage — auch die mit dem Wert `0`.
+
+      Eine Nulllinie wird ausgegraut gezeichnet statt weggelassen: das Gerüst
+      der Grafik soll stehen bleiben, statt bei jedem Nulldurchgang zu
+      verschwinden. Weggelassen wird nur, was es gar nicht gibt. */
   private _kanten(
     geometrie: Geometrie, bilanz: Bilanz, schwelle: number, hausKnoten: boolean,
   ): Kante[] {
@@ -335,20 +405,21 @@ export class SkytechPowerFlowCard extends LitElement {
       von: Knoten | undefined, nach: Knoten | undefined,
       wert: number, farbe: string, was: string,
     ) => {
-      if (!von || !nach || !fliesst(wert)) return
+      if (!von || !nach) return
       kanten.push({ von, nach, wert, farbe, beschreibung: `${was} ${leistung(wert, schwelle)}` })
     }
 
     anlegen(pv, mitte, bilanz.pvInsHaus, '--spfc-pv', 'Erzeugung ins Haus')
-    anlegen(pv, batterie, bilanz.pvInBatterie, '--spfc-pv', 'Erzeugung in die Batterie')
+    anlegen(pv, batterie, bilanz.pvInBatterie, '--spfc-battery-in', 'Erzeugung in die Batterie')
     anlegen(pv, netz, bilanz.pvInsNetz, '--spfc-export', 'Einspeisung')
     anlegen(netz, mitte, bilanz.netzInsHaus, '--spfc-grid', 'Netzbezug ins Haus')
     anlegen(netz, batterie, bilanz.netzInBatterie, '--spfc-grid', 'Netzbezug in die Batterie')
     anlegen(batterie, mitte, bilanz.batterieInsHaus, '--spfc-battery', 'Batterie ins Haus')
 
-    for (const geraet of bilanz.geraete) {
-      anlegen(mitte, findeKnoten(geometrie, geraet.id), geraet.fluss, '--spfc-house', 'Gerät')
-    }
+    bilanz.geraete.forEach((geraet, index) => {
+      anlegen(mitte, findeKnoten(geometrie, geraet.id), geraet.fluss,
+        GERAETE_FARBEN[index % GERAETE_FARBEN.length]!, 'Gerät')
+    })
     anlegen(mitte, findeKnoten(geometrie, 'rest'), bilanz.uebrigesHaus,
       '--spfc-house', 'Übriges Haus')
 
@@ -361,63 +432,145 @@ export class SkytechPowerFlowCard extends LitElement {
   ): SVGTemplateResult[] {
     const standard = config.standard ?? {}
     const geraete = new Map((config.devices ?? []).map((device) => [device.id, device]))
+    const reihenfolge = new Map(bilanz.geraete.map((geraet, index) => [geraet.id, index]))
     const fluesse = new Map(bilanz.geraete.map((geraet) => [geraet.id, geraet]))
 
     return geometrie.knoten.map((knoten) => {
       switch (knoten.art) {
         case 'pv':
-          return this._zeichneKnoten(geometrie, knoten, {
+          return this._zeichneKnoten(knoten, {
             symbol: SYMBOLE.pv!,
             beschriftung: standard.pv_label || 'Photovoltaik',
-            wert: bilanz.pv,
+            farbe: '--spfc-pv',
+            werte: [{ wert: bilanz.pv, richtung: 'runter' }],
+            untertitel: this._pvAufschluesselung(standard, schwelle),
+            untertitelBreit: true,
             leitEntitaet: (standard.pv_power_entities ?? [])[0],
             schwelle,
           })
         case 'netz':
-          return this._zeichneKnoten(geometrie, knoten, {
+          return this._zeichneKnoten(knoten, {
             symbol: SYMBOLE.netz!,
             beschriftung: standard.grid_label || 'Netz',
-            wert: this._netzAnzeige(bilanz),
+            farbe: bilanz.netzeinspeisung > bilanz.netzbezug ? '--spfc-export' : '--spfc-grid',
+            werte: this._netzWerte(bilanz),
             leitEntitaet: standard.grid_power_entity || standard.grid_import_entity,
             schwelle,
           })
         case 'haus':
         case 'verteiler':
-          return this._zeichneKnoten(geometrie, knoten, {
+          return this._zeichneKnoten(knoten, {
             symbol: knoten.art === 'haus' ? SYMBOLE.haus! : SYMBOLE.verteiler!,
             beschriftung: standard.house_label || 'Haus',
-            wert: bilanz.haus,
+            farbe: '--spfc-house',
+            werte: [{ wert: bilanz.haus }],
+            ring: hausRing(knoten, this._hausAnteile(bilanz)),
+            randlos: true,
             leitEntitaet: standard.house_power_entity,
             schwelle,
           })
-        case 'batterie':
-          return this._zeichneKnoten(geometrie, knoten, {
+        case 'batterie': {
+          const soc = ladestand(this._hass, standard.batterie?.soc_entity)
+          return this._zeichneKnoten(knoten, {
             symbol: SYMBOLE.batterie!,
             beschriftung: standard.batterie?.label || 'Batterie',
-            wert: this._batterieAnzeige(bilanz),
+            farbe: bilanz.laden > 0 ? '--spfc-battery-in' : '--spfc-battery',
+            werte: this._batterieWerte(bilanz),
+            ring: socRing(knoten, soc),
+            zusatz: soc === null ? '' : `Ladestand ${prozent(soc)}`,
+            untertitel: soc === null ? '' : prozent(soc),
             leitEntitaet: standard.batterie?.soc_entity,
-            soc: ladestand(this._hass, standard.batterie?.soc_entity),
             schwelle,
           })
+        }
         case 'rest':
-          return this._zeichneKnoten(geometrie, knoten, {
+          return this._zeichneKnoten(knoten, {
             symbol: SYMBOLE.rest!,
             beschriftung: 'Übriges Haus',
-            wert: { wert: bilanz.uebrigesHaus, quelle: 'direkt' },
+            farbe: '--spfc-house',
+            werte: [{ wert: { wert: bilanz.uebrigesHaus, quelle: 'direkt' } }],
             schwelle,
           })
         default: {
           const device = geraete.get(knoten.id)
-          const fluss = fluesse.get(knoten.id)
-          return this._zeichneGeraet(geometrie, knoten, device, fluss?.leistung, status, schwelle)
+          const index = reihenfolge.get(knoten.id) ?? 0
+          return this._zeichneGeraet(
+            knoten, device, fluesse.get(knoten.id)?.leistung, status, index, schwelle)
         }
       }
     })
   }
 
+  /** Woraus sich der Hausverbrauch speist — die Anteile des Herkunftsrings. */
+  private _hausAnteile(bilanz: Bilanz): HausAnteil[] {
+    return [
+      { anteil: bilanz.pvInsHaus, klasse: 'von-pv' },
+      { anteil: bilanz.batterieInsHaus, klasse: 'von-batterie' },
+      { anteil: bilanz.netzInsHaus, klasse: 'von-netz' },
+    ]
+  }
+
+  /** Netz und Speicher zeigen **beide** Richtungen. Eine einzelne
+      vorzeichenbehaftete Zahl an einem Knoten ist nicht zu deuten: −1,1 kW
+      kann Einspeisung oder ein Messfehler sein. */
+  private _netzWerte(bilanz: Bilanz): KnotenWert[] {
+    const werte: KnotenWert[] = []
+    if (bilanz.netzeinspeisung > 0 || bilanz.netzbezug === 0) {
+      werte.push({
+        wert: { wert: bilanz.netzeinspeisung, quelle: 'direkt' },
+        richtung: 'links', farbe: '--spfc-export',
+      })
+    }
+    if (bilanz.netzbezug > 0 || werte.length === 0) {
+      werte.push({
+        wert: { wert: bilanz.netzbezug, quelle: 'direkt' },
+        richtung: 'rechts', farbe: '--spfc-grid',
+      })
+    }
+    return werte
+  }
+
+  private _batterieWerte(bilanz: Bilanz): KnotenWert[] {
+    const werte: KnotenWert[] = []
+    if (bilanz.laden > 0 || bilanz.entladen === 0) {
+      werte.push({
+        wert: { wert: bilanz.laden, quelle: 'direkt' },
+        richtung: 'runter', farbe: '--spfc-battery-in',
+      })
+    }
+    if (bilanz.entladen > 0) {
+      werte.push({
+        wert: { wert: bilanz.entladen, quelle: 'direkt' },
+        richtung: 'hoch', farbe: '--spfc-battery',
+      })
+    }
+    return werte
+  }
+
+  /** Die Erzeugungszeilen, die laut Vertrag **nicht** summiert werden.
+
+      Je Zeile eine eigene Textzeile: aneinandergereiht wären sie länger als
+      der Knoten breit ist und würden abgeschnitten. Mehr als drei passen nicht
+      in den Zeilenabstand — der Rest wird gezählt statt gezeigt. */
+  private _pvAufschluesselung(standard: FlowConfig['standard'], schwelle: number): string[] {
+    const entities = standard?.pv_detail_entities ?? []
+    if (entities.length === 0) return []
+
+    const zeilen = entities.slice(0, PV_DETAIL_MAX).map((entity: string) => {
+      const state = this._hass?.states[entity]
+      const name = String(state?.attributes?.['friendly_name'] ?? entity)
+      const wert = Number(state?.state)
+      const text = Number.isFinite(wert) ? leistung(wert, schwelle) : UNBEKANNT_TEXT
+      return `${name} ${text}`
+    })
+    const rest = entities.length - zeilen.length
+    if (rest > 0) zeilen.push(`und ${rest} weitere`)
+    return zeilen
+  }
+
   private _zeichneGeraet(
-    geometrie: Geometrie, knoten: Knoten, device: Device | undefined,
-    wert: Aufloesung | undefined, status: FlowStatus | null, schwelle: number,
+    knoten: Knoten, device: Device | undefined, wert: Aufloesung | undefined,
+    status: FlowStatus | null, index: number, schwelle: number,
   ): SVGTemplateResult {
     const eintrag = device ? status?.devices?.[device.id] : undefined
     // Fehlt die Statusentität, gilt jedes Gerät aus devices[] als geregelt —
@@ -425,101 +578,103 @@ export class SkytechPowerFlowCard extends LitElement {
     const aktiv = !status || eintrag?.runtime_active !== false
     const grund = aktiv ? '' : (eintrag?.inactive_reasons ?? [])[0] ?? 'regelt gerade nicht mit'
 
-    return this._zeichneKnoten(geometrie, knoten, {
+    return this._zeichneKnoten(knoten, {
       symbol: device?.icon || SYMBOLE[device?.class ?? ''] || SYMBOLE.controllable!,
       beschriftung: device?.label || device?.id || '',
-      wert: wert ?? { wert: null, quelle: 'unbekannt' },
+      farbe: GERAETE_FARBEN[index % GERAETE_FARBEN.length]!,
+      farbeRoh: device?.farbe || '',
+      werte: [{ wert: wert ?? { wert: null, quelle: 'unbekannt' } }],
       leitEntitaet: device?.power_entity || device?.switch_entity,
-      farbe: device?.farbe,
-      ring: aktiv ? 'aktiv' : 'ruhend',
+      ringElement: akzentRing(knoten, aktiv),
       untertitel: grund,
       zusatz: aktiv ? 'vom HEMS geregelt' : grund,
       schwelle,
     })
   }
 
-  private _zeichneKnoten(geometrie: Geometrie, knoten: Knoten, teil: {
-    symbol: string
-    beschriftung: string
-    wert: Aufloesung
-    schwelle: number
-    leitEntitaet?: string
-    soc?: number | null
-    farbe?: string
-    ring?: 'aktiv' | 'ruhend'
-    untertitel?: string
-    zusatz?: string
-  }): SVGTemplateResult {
+  private _zeichneKnoten(knoten: Knoten, teil: KnotenTeil): SVGTemplateResult {
     const klickbar = Boolean(teil.leitEntitaet)
-    const text = leistung(teil.wert.wert, teil.schwelle)
-    const unbekannt = teil.wert.wert === null
-    const symbolGroesse = knoten.r * 1.1
+    const farbe = teil.farbeRoh || `var(${teil.farbe})`
+    const symbolY = knoten.y - (teil.werte.length > 1 ? 18 : 13)
+    const beschriftungY = knoten.beschriftung === 'oben'
+      ? knoten.y - knoten.r - 8
+      : knoten.y + knoten.r + BESCHRIFTUNG_H - 4
+    const untertitelY = knoten.beschriftung === 'oben'
+      ? knoten.y + knoten.r + 14
+      : beschriftungY + 14
+    const untertitel = typeof teil.untertitel === 'string'
+      ? (teil.untertitel ? [teil.untertitel] : [])
+      : (teil.untertitel ?? [])
+    // Die Aufschlüsselung darf über den Knoten hinausragen: sie steht in der
+    // obersten Reihe, wo neben ihr nichts liegt.
+    const untertitelBreite = teil.untertitelBreit ? knoten.r * 2 + 90 : knoten.r * 2 + 40
 
     const beschreibung = [
       teil.beschriftung,
-      leistungGesprochen(teil.wert.wert, teil.schwelle),
-      teil.soc !== undefined && teil.soc !== null ? `Ladestand ${prozent(teil.soc)}` : '',
-      teil.wert.quelle === 'status' ? 'aus dem HEMS-Status' : '',
+      ...teil.werte.map((eintrag) => leistungGesprochen(eintrag.wert.wert, teil.schwelle)),
+      teil.werte.some((eintrag) => eintrag.wert.quelle === 'status') ? 'aus dem HEMS-Status' : '',
       teil.zusatz ?? '',
     ].filter(Boolean).join(', ')
 
     return svg`
       <g
         class=${`knoten${klickbar ? ' klickbar' : ''}`}
+        style=${`color: ${farbe}`}
         role=${klickbar ? 'button' : 'group'}
         tabindex=${klickbar ? '0' : nothing}
         aria-label=${beschreibung}
         @click=${() => this._oeffneDialog(teil.leitEntitaet)}
         @keydown=${(event: KeyboardEvent) => this._taste(event, teil.leitEntitaet)}
       >
-        ${teil.soc !== undefined ? socRing(knoten, teil.soc ?? null) : null}
-        ${teil.ring ? akzentRing(knoten, teil.ring === 'aktiv') : null}
         <circle
-          class="knoten-flaeche" cx=${knoten.x} cy=${knoten.y} r=${knoten.r}
-          style=${teil.farbe ? `stroke: ${teil.farbe}` : nothing}
+          class=${`knoten-flaeche${teil.randlos ? ' randlos' : ''}`}
+          cx=${knoten.x} cy=${knoten.y} r=${knoten.r}
         ></circle>
+        ${teil.ring ?? null}
+        ${teil.ringElement ?? null}
         <foreignObject
-          x=${knoten.x - symbolGroesse / 2} y=${knoten.y - symbolGroesse / 2}
-          width=${symbolGroesse} height=${symbolGroesse}
+          x=${knoten.x - SYMBOL_GROESSE / 2} y=${symbolY - SYMBOL_GROESSE / 2}
+          width=${SYMBOL_GROESSE} height=${SYMBOL_GROESSE}
           aria-hidden="true"
         >
           <ha-icon class="symbol" icon=${teil.symbol}></ha-icon>
         </foreignObject>
-        <text
-          class="beschriftung" x=${knoten.x} y=${knoten.y + knoten.r + 16}
-          font-size=${geometrie.schrift}
-        >${teil.beschriftung}</text>
-        <text
-          class=${`wert${unbekannt ? ' unbekannt' : ''}`}
-          x=${knoten.x} y=${knoten.y + knoten.r + 16 + geometrie.schrift + 2}
-          font-size=${geometrie.schrift - 1}
-        >${text}${teil.soc !== undefined && teil.soc !== null ? ` · ${prozent(teil.soc)}` : ''}</text>
-        ${teil.untertitel ? svg`
-          <text
-            class="untertitel" x=${knoten.x}
-            y=${knoten.y + knoten.r + 16 + (geometrie.schrift + 2) * 2}
-            font-size=${geometrie.schrift - 2}
-          >${teil.untertitel}</text>
-        ` : null}
+        ${teil.werte.map((eintrag, index) => this._zeichneWert(
+          knoten, eintrag, index, teil.werte.length, teil.schwelle))}
+        <text class="beschriftung" x=${knoten.x} y=${beschriftungY}>
+          ${kuerze(teil.beschriftung, knoten.r * 2 + 20)}
+          <title>${teil.beschriftung}</title>
+        </text>
+        ${untertitel.map((zeile, index) => svg`
+          <text class="untertitel" x=${knoten.x} y=${untertitelY + index * 13}>
+            ${kuerze(zeile, untertitelBreite)}
+            <title>${zeile}</title>
+          </text>
+        `)}
       </g>
     `
   }
 
-  private _netzAnzeige(bilanz: Bilanz): Aufloesung {
-    if (bilanz.netzbezug === 0 && bilanz.netzeinspeisung === 0) {
-      // Beide Richtungen leer kann „nichts fließt" oder „nichts bekannt"
-      // heißen. Unterschieden wird an der Quelle, nicht an der Zahl.
-      return { wert: 0, quelle: 'direkt' }
-    }
-    return bilanz.netzbezug > 0
-      ? { wert: bilanz.netzbezug, quelle: 'direkt' }
-      : { wert: -bilanz.netzeinspeisung, quelle: 'direkt' }
-  }
+  /** Ein Wert **im** Kreis, mit Richtungspfeil davor. */
+  private _zeichneWert(
+    knoten: Knoten, eintrag: KnotenWert, index: number, anzahl: number, schwelle: number,
+  ): SVGTemplateResult {
+    const y = knoten.y + (anzahl > 1 ? 4 + index * 15 : 12)
+    const text = leistung(eintrag.wert.wert, schwelle)
+    const unbekannt = eintrag.wert.wert === null
+    const breite = text.length * ZEICHEN_BREITE
+    const pfeilX = knoten.x - breite / 2 - 6
 
-  private _batterieAnzeige(bilanz: Bilanz): Aufloesung {
-    if (bilanz.laden > 0) return { wert: bilanz.laden, quelle: 'direkt' }
-    if (bilanz.entladen > 0) return { wert: -bilanz.entladen, quelle: 'direkt' }
-    return { wert: 0, quelle: 'direkt' }
+    return svg`
+      <g style=${eintrag.farbe ? `color: var(${eintrag.farbe})` : nothing}>
+        ${eintrag.richtung && !unbekannt
+          ? richtungsPfeil(pfeilX, y - 4, eintrag.richtung) : null}
+        <text
+          class=${`wert${unbekannt ? ' unbekannt' : ''}`}
+          x=${eintrag.richtung && !unbekannt ? knoten.x + 4 : knoten.x} y=${y}
+        >${text}</text>
+      </g>
+    `
   }
 
   /** Damit ein Bildschirmleser die Karte erfassen kann, ohne jeden
@@ -557,6 +712,38 @@ export class SkytechPowerFlowCard extends LitElement {
     event.preventDefault()
     this._oeffneDialog(entityId)
   }
+}
+
+interface KnotenWert {
+  wert: Aufloesung
+  richtung?: 'hoch' | 'runter' | 'links' | 'rechts'
+  farbe?: string
+}
+
+interface KnotenTeil {
+  symbol: string
+  beschriftung: string
+  farbe: string
+  werte: KnotenWert[]
+  schwelle: number
+  /** Vom Benutzer im HEMS gesetzte Farbe. Sie schlägt die Palette. */
+  farbeRoh?: string
+  leitEntitaet?: string
+  ring?: SVGTemplateResult | null
+  ringElement?: SVGTemplateResult | null
+  randlos?: boolean
+  /** Eine Zeile oder mehrere. Mehr als drei passen nicht unter den Knoten. */
+  untertitel?: string | string[]
+  untertitelBreit?: boolean
+  zusatz?: string
+}
+
+/** SVG-Text kann nicht von selbst auslassen. Gekürzt wird deshalb hier, nach
+    einer mittleren Zeichenbreite — der volle Text steht im `<title>`. */
+export function kuerze(text: string, maxBreite: number): string {
+  const zeichen = Math.floor(maxBreite / ZEICHEN_BREITE)
+  if (text.length <= zeichen) return text
+  return `${text.slice(0, Math.max(1, zeichen - 1)).trimEnd()}…`
 }
 
 const HINWEIS_TEXTE: Record<Hinweis, string> = {
