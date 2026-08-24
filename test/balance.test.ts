@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { berechneBilanz, fliesst, type BilanzEingabe } from '../src/balance'
+import { berechneBilanz, type BilanzEingabe } from '../src/balance'
 import type { Aufloesung } from '../src/power'
 
 /* Bilanzregeln. Reine Funktionen — die Eingaben stehen hier als Zahlen,
@@ -35,13 +35,26 @@ describe('Hausleistung', () => {
     expect(bilanz.haus.wert).toBe(1200)
   })
 
-  test('negative Hausbilanz wird auf 0 geklemmt und gemeldet', () => {
+  test('negative Hausbilanz gilt als unbekannt und wird gemeldet', () => {
     const bilanz = berechneBilanz(eingabe({
       pv: direkt(0),
       netz: { hin: direkt(0), her: direkt(2000) },
     }))
-    expect(bilanz.haus.wert).toBe(0)
+    expect(bilanz.haus.wert).toBeNull()
     expect(bilanz.hinweise).toContain('bilanz_unplausibel')
+  })
+
+  test('eine unplausible Hausbilanz deckelt die Geräte NICHT auf 0', () => {
+    // Vorher wurde hier auf 0 geklemmt; anschließend deckelte die Bilanz jeden
+    // Gerätefluss auf 0, und die Karte zeigte Geräte mit 2,7 kW, die an keiner
+    // Linie hingen. Der Knoten widersprach damit der Grafik.
+    const bilanz = berechneBilanz(eingabe({
+      pv: direkt(0),
+      netz: { hin: direkt(0), her: direkt(2000) },
+      geraete: [{ id: 'heizstab', leistung: direkt(2700) }],
+    }))
+    expect(bilanz.hinweise).toContain('bilanz_unplausibel')
+    expect(bilanz.geraete[0]!.fluss).toBe(2700)
   })
 
   test('ohne Erzeugung und ohne Netzwert bleibt die Hausleistung unbekannt', () => {
@@ -130,15 +143,10 @@ describe('Herkunft und Verbleib', () => {
 })
 
 describe('Kanten', () => {
-  test('Kanten mit Wert 0 entstehen nicht', () => {
-    expect(fliesst(0)).toBe(false)
-    expect(fliesst(0.4)).toBe(false)
-    expect(fliesst(1)).toBe(true)
-  })
-
-  test('unbekannte Werte erzeugen keine Kante', () => {
-    expect(fliesst(null)).toBe(false)
-    expect(fliesst(undefined)).toBe(false)
-    expect(fliesst(Number.NaN)).toBe(false)
+  test('ohne Erzeugung und ohne Netz gibt es keine Herkunft zu verteilen', () => {
+    const bilanz = berechneBilanz(eingabe({ haus: direkt(1000) }))
+    expect(bilanz.pvInsHaus).toBe(0)
+    expect(bilanz.batterieInsHaus).toBe(0)
+    expect(bilanz.netzInsHaus).toBe(1000)
   })
 })

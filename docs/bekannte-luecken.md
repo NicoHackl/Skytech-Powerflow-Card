@@ -23,10 +23,20 @@ belegt — sie werden nicht als erfüllt gemeldet, bis sie geprüft sind:
 
 Dinge, die schon einmal Zeit gekostet haben:
 
+- **Die Karte kennt ihre eigene Breite nur über einen `ResizeObserver`.** Vor der ersten Messung
+  rechnet sie mit 480 px. In einer Umgebung ohne `ResizeObserver` bleibt es dabei — die Zeichnung
+  ist dann nicht auf die Spalte abgestimmt, aber vollständig.
+- **Die Beschriftung wird nach einer mittleren Zeichenbreite gekürzt, nicht gemessen.** SVG-Text
+  kann nicht von selbst auslassen. Ein Name aus lauter schmalen Zeichen wird deshalb früher
+  gekürzt als nötig; der volle Text steht im `<title>`.
 - **Der Zustand der Statusentität ist `pool_w`, nicht ihre Nutzlast.** Er kann gleich bleiben,
   während sich ein Gerät in den Attributen ändert. Wer die Änderungserkennung nur auf `state`
   aufbaut, verschläft solche Zyklen. Deshalb zählt für diese eine Entität zusätzlich
   `last_cycle_at` (`src/contract.ts`).
+- **Ohne Release findet HACS die Karte nicht.** `dist/` ist nicht eingecheckt (D-005), also gibt
+  es die Datei nur als Release-Anhang. Ein Stand, der bloß auf `main` liegt, führt zu
+  *„Repository structure for main is not compliant"* — es fehlt der Tag, nicht der Code.
+  Ablauf: [git-workflow.md](git-workflow.md#release).
 - **Die Karte darf nicht bei jeder Zustandsänderung rendern.** Der `hass`-Setter feuert für jede
   Entität im ganzen Haus. Ohne die Prüfung gegen die abonnierte Menge sind das Dutzende
   Renderläufe je Sekunde.

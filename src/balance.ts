@@ -113,8 +113,12 @@ function hausLeistung(
 
   const gerechnet = (pv ?? 0) + netzbezug + entladen - netzeinspeisung - laden
   if (gerechnet < 0) {
+    // Eine negative Hausleistung gibt es nicht. Früher wurde hier auf 0
+    // geklemmt — das deckelte anschließend JEDEN Gerätefluss auf 0, und die
+    // Karte zeigte Geräte mit 2,7 kW, die an keiner Linie hingen. Unbekannt
+    // ist die ehrlichere Antwort: die Geräte behalten ihren eigenen Messwert.
     hinweise.push('bilanz_unplausibel')
-    return { wert: 0, quelle: 'direkt' }
+    return UNBEKANNT
   }
   return { wert: gerechnet, quelle: 'direkt' }
 }
@@ -124,7 +128,11 @@ function hausLeistung(
 
     Übersteigt ihre Summe die Hausleistung, werden die Flüsse PROPORTIONAL
     gekürzt und der Kopf bekennt es. Ohne diesen Hinweis sähe die Karte
-    richtig aus, obwohl sie es nicht ist. */
+    richtig aus, obwohl sie es nicht ist.
+
+    Ist die Hausleistung **unbekannt**, wird nicht gedeckelt: dann gibt es
+    nichts, wogegen zu deckeln wäre, und ein Gerät mit gemessener Leistung
+    gehört gezeichnet. */
 function deckele(
   geraete: GeraetEingabe[], haus: number | null, hinweise: Hinweis[],
 ): GeraetFluss[] {

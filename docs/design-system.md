@@ -25,6 +25,64 @@ selbstgebauten.
 Jede übernommene Variable bekommt einen Rückfallwert für Themes, die sie nicht setzen. Ohne den
 wäre die Karte in einem sparsamen Theme unsichtbar.
 
+## Feste Maße
+
+Die Karte **skaliert ihre Inhalte nicht** mit der Kartenbreite (D-007). Sie misst ihre Breite mit
+einem `ResizeObserver` und rechnet in Bildschirmpunkten; die viewBox trägt genau diese Breite.
+
+| Element | Maß |
+|---|---|
+| Knotendurchmesser | 80 px |
+| Symbol | 24 px |
+| Wert im Knoten | 12 px |
+| Beschriftung | 12 px |
+| Untertitel | 11 px |
+| Strichbreite einer Kante | 1 px, `non-scaling-stroke` |
+| Eckenradius einer Kante | 22 px |
+
+Auf einer breiten Karte wird **zentriert, nicht gedehnt**. Reicht die Breite nicht, rücken die
+Spalten enger zusammen — bis zu einer Grenze, unter der sich die Kreise berühren würden.
+
+Die Zeilenhöhe wird aus dem tatsächlichen Textblock gerechnet (Kreis + Beschriftung + Untertitel
++ Luft), nicht als Zahl gesetzt. Eine gesetzte Zeilenhöhe war der Grund, warum in der ersten
+Fassung jede Wertzeile im Knoten darunter lag.
+
+## Aufbau
+
+```text
+        ┌───────────┐
+        │ Erzeugung │
+        └─────┬─────┘
+              │             ┌───────────┐
+  ┌──────┐    │             │ Heizstab  │
+  │ Netz ├────┼────┬────────┼───────────┤
+  └──────┘    │    │  Haus  │ Wallbox   │
+        ┌─────┴──┐ │        ├───────────┤
+        │Speicher├─┘        │ Heizlüfter│
+        └────────┘          └───────────┘
+```
+
+Das Haus steht rechts der Erzeugung, die Quellen fließen von links und oben hinein — wie im
+Vorbild. Die HEMS-Geräte hängen als Spalte rechts daneben und brechen ab sieben Einträgen in eine
+zweite Spalte um.
+
+Verbindungen laufen **rechtwinklig**: senkrechter Stummel aus dem Knoten, eine gerundete Ecke,
+waagerechter Lauf in den Zielknoten. Fluchten zwei Knoten, wird eine gerade Linie gezogen.
+Diagonalen gibt es nicht — sie kreuzten die Fläche zwischen den Spalten und machten die Karte
+unruhig.
+
+## Werte und Beschriftung
+
+- Der Wert steht **im** Kreis, in der Quellfarbe, mit einem gezeichneten Richtungspfeil davor.
+- Netz und Speicher zeigen **beide** Richtungen untereinander. Eine einzelne vorzeichenbehaftete
+  Zahl an einem Knoten ist nicht zu deuten: `−1,1 kW` kann Einspeisung oder ein Messfehler sein.
+- Die Beschriftung steht **außerhalb** — in der obersten Reihe über dem Kreis, sonst darunter.
+  Über dem Kreis deshalb, weil die Linie dort nach unten abgeht und die Beschriftung sonst
+  dazwischen läge.
+- Beschriftungen werden auf Knotenbreite gekürzt; der volle Text steht im `<title>`.
+- Der **Hausknoten** trägt keinen eigenen Rand, sondern einen nach Herkunft geteilten Ring:
+  wie viel des Verbrauchs gerade aus Erzeugung, Speicher und Netz kommt.
+
 ## Tokens
 
 Definiert **genau einmal**, am Wurzelelement in [`../src/styles.ts`](../src/styles.ts). Danach
@@ -45,11 +103,22 @@ wird ausschließlich über `var(--…)` zugegriffen.
   --spfc-battery: var(--energy-battery-out-color, #4db6ac);
   --spfc-house:   var(--energy-non-fossil-color, #0f9d58);
 
+  --spfc-battery-in: var(--energy-battery-in-color, #f06292);
   --spfc-accent:  #18bcf2;
   --spfc-unknown: var(--disabled-text-color, #bdbdbd);
   --spfc-warn:    var(--warning-color, #ff9800);
+
+  /* Gerätefarben, zyklisch vergeben */
+  --spfc-geraet-1: #d0cc5b;
+  --spfc-geraet-2: #964cb5;
+  --spfc-geraet-3: #b54c9d;
+  --spfc-geraet-4: #5bd0cc;
 }
 ```
+
+Jeder Knoten trägt seine Farbe auf **Rand, Symbol, Wert und abgehendem Fluss** — nicht nur auf
+einem davon. Ein grauer Kreis mit grauem Symbol neben einer farbigen Linie liest sich nicht als
+dasselbe Ding.
 
 Die `--energy-*`-Variablen sind die Farben der HA-eigenen Energiekarten. Sie zu verwenden lässt
 die Karte im Dashboard zu Hause wirken und respektiert Themes, die sie umdefinieren.
@@ -81,12 +150,19 @@ zusätzlich Text, Form oder Symbol:
 
 ## Bewegung
 
-- **Punktanimation:** ein `<circle>` je Kante, bewegt über `<animateMotion>` entlang desselben
-  Pfades. Die Geschwindigkeit steigt mit der Leistung, gedeckelt auf einen Bereich, der ruhig
-  bleibt. Kein Fluss heißt kein Punkt.
-- **`prefers-reduced-motion: reduce` schaltet sie ab** — unabhängig davon, was der Vertrag sagt.
-  Die Flussrichtung muss dann aus den Pfeilspitzen ablesbar bleiben. Deshalb trägt **jede** Kante
-  eine Pfeilspitze, nicht nur die animierten.
+- **Die Leistung steckt in der Geschwindigkeit, nicht in der Strichdicke.** Alle Linien sind
+  gleich dünn. Eine zur Leistung proportionale Breite machte den größten Fluss immer maximal dick,
+  egal wie klein die Anlage war.
+- **Punktanimation:** ein `<circle>` je Kante, bewegt über `<animateMotion>` mit `<mpath>` und
+  `calcMode="paced"`. Die Dauer kommt aus einem **festen** Erwartungsbereich und ist auf halbe
+  Sekunden gerastert. Hinge sie am gerade größten Fluss, änderte sie sich bei jedem Messwert — und
+  SMIL beginnt bei einer Änderung von vorn, der Punkt spränge zurück.
+- **Ein Nullfluss löscht die Linie nicht**, er dämpft sie. Das Gerüst der Grafik bleibt damit
+  stehen, statt bei jedem Nulldurchgang zu verschwinden.
+- **`prefers-reduced-motion: reduce` schaltet die Punkte ab.** Die Richtung bleibt an den
+  gezeichneten Pfeilen **in** den Knoten ablesbar. Pfeilspitzen an den Linien gibt es bewusst
+  nicht: als `<marker>` skalierten sie mit der Strichbreite und lösten ihre Farbe im `<defs>`
+  falsch auf.
 - Zustandswechsel dauern höchstens 0,2 s. Nichts animiert länger als nötig.
 
 ## Kontrast

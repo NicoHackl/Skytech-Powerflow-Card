@@ -11,6 +11,50 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+## [0.2.0] — 24.08.2026
+
+### Geändert
+
+- **Die Karte sieht anders aus.** Sie folgt jetzt der Bildsprache von `power-flow-card-plus`:
+  Erzeugung oben, Netz links, Haus rechts, Speicher unten, die HEMS-Geräte als Spalte daneben.
+  Die Werte stehen **im** Knoten, mit einem Richtungspfeil davor; die Beschriftung steht außen.
+  Verbindungen laufen rechtwinklig mit einer gerundeten Ecke statt diagonal.
+- **Knoten und Schrift behalten ihre Größe.** Vorher skalierte die ganze Zeichnung auf die
+  Kartenbreite und schrumpfte die Beschriftung dabei unter die Lesbarkeit. Jetzt rechnet die Karte
+  in Bildschirmpunkten; auf einer breiten Karte wird zentriert statt gedehnt.
+- **Netz und Speicher zeigen beide Richtungen.** Statt einer vorzeichenbehafteten Zahl stehen
+  Bezug und Einspeisung beziehungsweise Laden und Entladen untereinander — eine Zahl wie `−1,1 kW`
+  an einem Knoten war nicht zu deuten.
+- **Der Hausknoten trägt seine Herkunft.** Sein Ring ist nach Quelle in Bögen geteilt: wie viel des
+  Verbrauchs gerade aus Erzeugung, Speicher und Netz kommt.
+- **Die Leistung steckt in der Punktgeschwindigkeit, nicht in der Strichdicke.** Alle Linien sind
+  gleich dünn. Vorher war der größte Fluss immer maximal dick, egal wie klein die Anlage war.
+- Geräte bekommen eine eigene Farbe auf Rand, Symbol, Wert und Fluss.
+- Erzeugungssensoren ohne Summenhaken erscheinen als Aufschlüsselung unter dem Knoten.
+
+### Behoben
+
+- **Beschriftungen lagen im Knoten darunter.** Die Zeilenhöhe war fest gesetzt und reichte für zwei
+  bis drei Textzeilen nicht; bei Geräten ragte der Untertitel 22 px in den nächsten Kreis. Sie wird
+  jetzt aus dem tatsächlichen Textblock gerechnet.
+- **Symbole saßen rund 8 px nach oben links versetzt.** Der Rahmen um das Symbol war größer als das
+  Symbol und zentrierte es nicht.
+- **Bei unplausibler Hausbilanz verschwand jede Flusslinie.** Die Hausleistung wurde auf 0 geklemmt
+  und deckelte damit jeden Gerätefluss auf 0 — die Karte zeigte Geräte mit mehreren Kilowatt, die
+  an keiner Linie hingen. Eine unplausible Bilanz gilt jetzt als unbekannt; die Geräte behalten
+  ihren eigenen Messwert, das Abzeichen bleibt.
+- **Die Punkte sprangen statt zu laufen.** Ihre Geschwindigkeit hing am gerade größten Fluss der
+  Anlage und änderte sich damit ständig; jede Änderung ließ die Animation von vorn beginnen. Sie
+  kommt jetzt aus einem festen Erwartungsbereich und ist gerastert.
+- **Die Karte zeichnete mehrmals pro Sekunde neu** (gemessen: 197 DOM-Änderungen in 12 Sekunden).
+  Änderungen werden jetzt auf höchstens eine pro Sekunde zusammengefasst; ein neu angelegtes Gerät
+  erscheint weiterhin sofort.
+- **Pfeilspitzen waren zu groß und hatten die falsche Farbe.** Sie wuchsen mit der Strichbreite auf
+  fast Knotengröße und erschienen in der Textfarbe statt in der Flussfarbe. Sie entfallen; die
+  Richtung tragen die laufenden Punkte und die Pfeile in den Knoten.
+- Linien mit dem Wert `0` verschwinden nicht mehr, sondern werden gedämpft gezeichnet — das Gerüst
+  der Grafik bleibt stehen.
+
 ## [0.1.0] — 23.08.2026
 
 ### Hinzugefügt

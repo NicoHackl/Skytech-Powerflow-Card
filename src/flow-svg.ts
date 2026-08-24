@@ -2,94 +2,88 @@ import { svg, type SVGTemplateResult } from 'lit'
 import type { Knoten } from './layout'
 import { kantenPfad } from './layout'
 
-/* Erzeugung der SVG-Bausteine: Kanten, Punktanimation, Knoten.
+/* SVG-Bausteine: Kanten, Punktanimation, Ringe, Richtungspfeile.
 
    Inline-Werte gibt es hier ausschließlich für berechnete Geometrie —
-   Pfadangaben, Strichbreiten, Positionen. Farben kommen ohne Ausnahme aus
-   den Token in styles.ts. */
+   Pfadangaben, Positionen, Bogenlängen. Farben kommen ohne Ausnahme aus den
+   Token in styles.ts. */
 
-export const BREITE_MIN = 1.5
-export const BREITE_MAX = 7
+/** Untere und obere Grenze der Punktdauer in Sekunden. Ein kräftiger Fluss
+    läuft schnell, ein schwacher zäh — die Leistung steckt in der
+    Geschwindigkeit, nicht in der Strichbreite. */
+export const DAUER_SCHNELL_S = 0.9
+export const DAUER_LANGSAM_S = 6
 
-/** Unter diesem Bezugswert wird nicht weiter herunterskaliert. Ohne ihn
-    wäre bei einer 5-Watt-Anlage jede Linie maximal dick. */
-export const MASSSTAB_MIN_W = 100
+/** Rasterung der Punktdauer. Ohne sie änderte sich `dur` bei jedem
+    Messwert und die Animation begänne von vorn — mehrmals pro Sekunde. */
+export const DAUER_RASTER_S = 0.5
 
-const DAUER_MIN_S = 1.6
-const DAUER_MAX_S = 5
+/** Ab diesem Betrag gilt eine Kante als fließend. Darunter wird sie gezeichnet,
+    aber ausgegraut: das Gerüst der Grafik soll stehen bleiben, statt bei jedem
+    Nulldurchgang zu verschwinden. */
+export const FLUSS_SCHWELLE_W = 1
 
 export interface Kante {
   von: Knoten
   nach: Knoten
-  /** Watt. Kanten unterhalb der Flussschwelle werden gar nicht erst gebaut. */
+  /** Watt. `0` heißt: Linie zeichnen, aber ohne Punkt und ausgegraut. */
   wert: number
   /** CSS-Variable der Flussfarbe, z. B. `--spfc-pv`. */
   farbe: string
-  /** Beschreibung für die Zusammenfassung des Bildschirmlesers. */
   beschreibung: string
 }
 
-export function strichbreite(wert: number, maximalfluss: number): number {
-  const bezug = Math.max(maximalfluss, MASSSTAB_MIN_W)
-  return Math.min(BREITE_MAX, Math.max(BREITE_MIN, (wert / bezug) * BREITE_MAX))
+/** Punktdauer aus einem **festen** Erwartungsbereich, nicht aus dem gerade
+    größten Fluss. Sonst hinge die Geschwindigkeit jeder Linie daran, was
+    anderswo in der Anlage passiert. */
+export function punktDauer(wert: number, minLeistung: number, maxLeistung: number): number {
+  const unten = Math.max(1, minLeistung)
+  const oben = Math.max(unten * 2, maxLeistung)
+  const anteil = Math.min(1, Math.max(0, (Math.abs(wert) - unten) / (oben - unten)))
+  const roh = DAUER_LANGSAM_S - anteil * (DAUER_LANGSAM_S - DAUER_SCHNELL_S)
+  return Math.round(roh / DAUER_RASTER_S) * DAUER_RASTER_S
 }
 
-/** Schneller Fluss, schnellerer Punkt — aber gedeckelt, damit die Karte
-    ruhig bleibt. */
-export function punktDauer(wert: number, maximalfluss: number): number {
-  const bezug = Math.max(maximalfluss, MASSSTAB_MIN_W)
-  const anteil = Math.min(1, Math.max(0, wert / bezug))
-  return DAUER_MAX_S - anteil * (DAUER_MAX_S - DAUER_MIN_S)
+export function fliesst(wert: number | null | undefined): boolean {
+  return typeof wert === 'number' && Number.isFinite(wert) && Math.abs(wert) >= FLUSS_SCHWELLE_W
 }
 
+/** Eine Kante. Strichbreite ist immer 1 — `non-scaling-stroke` hält sie auch
+    dann bei einem Bildschirmpunkt, wenn die Karte skaliert wird. */
 export function zeichneKante(
-  kante: Kante, maximalfluss: number, animation: boolean, index: number,
+  kante: Kante, animation: boolean, minLeistung: number, maxLeistung: number, index: number,
 ): SVGTemplateResult {
   const pfad = kantenPfad(kante.von, kante.nach)
-  const breite = strichbreite(kante.wert, maximalfluss)
   const id = `spfc-kante-${index}`
+  const aktiv = fliesst(kante.wert)
+
   return svg`
-    <g style="color: var(${kante.farbe})" aria-hidden="true">
+    <g style=${`color: var(${kante.farbe})`} aria-hidden="true">
       <path
         id=${id}
-        class="kante"
+        class=${`kante${aktiv ? '' : ' ruhend'}`}
         d=${pfad}
-        stroke="currentColor"
-        stroke-width=${breite}
-        marker-end="url(#spfc-pfeil)"
+        vector-effect="non-scaling-stroke"
       ></path>
-      ${animation ? svg`
-        <circle class="punkt" r=${Math.max(2, breite * 0.7)}>
+      ${aktiv && animation ? svg`
+        <circle class="punkt" r="1" vector-effect="non-scaling-stroke">
           <animateMotion
-            dur=${`${punktDauer(kante.wert, maximalfluss).toFixed(2)}s`}
+            dur=${`${punktDauer(kante.wert, minLeistung, maxLeistung)}s`}
             repeatCount="indefinite"
-            path=${pfad}
-          ></animateMotion>
+            calcMode="paced"
+          >
+            <mpath href=${`#${id}`}></mpath>
+          </animateMotion>
         </circle>
       ` : null}
     </g>
   `
 }
 
-/** Die Pfeilspitze trägt die Flussrichtung auch dann, wenn sich nichts
-    bewegt — bei `prefers-reduced-motion` oder abgeschalteter Animation. */
-export function pfeilDefinition(): SVGTemplateResult {
-  return svg`
-    <defs>
-      <marker
-        id="spfc-pfeil" viewBox="0 0 10 10" refX="8" refY="5"
-        markerWidth="5" markerHeight="5" orient="auto-start-reverse"
-      >
-        <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"></path>
-      </marker>
-    </defs>
-  `
-}
-
-/** Der Ladestandsring um den Batterieknoten. `null` heißt: kein Ring. */
+/** Ladestandsring um den Speicherknoten. `null` heißt: kein Ring. */
 export function socRing(knoten: Knoten, prozent: number | null): SVGTemplateResult | null {
   if (prozent === null) return null
-  const radius = knoten.r + 6
+  const radius = knoten.r - 2
   const umfang = 2 * Math.PI * radius
   const gefuellt = (Math.min(100, Math.max(0, prozent)) / 100) * umfang
   return svg`
@@ -103,9 +97,47 @@ export function socRing(knoten: Knoten, prozent: number | null): SVGTemplateResu
   `
 }
 
+export interface HausAnteil {
+  /** Anteil am Hausverbrauch, 0…1. */
+  anteil: number
+  klasse: string
+}
+
+/** Der Herkunftsring des Hausknotens: ein Ring, in Bögen nach Quelle geteilt.
+
+    Das ist das Detail, das dem Vorbild sein Aussehen gibt — der Hausknoten
+    trägt seine Herkunft, statt ein weiterer grauer Kreis zu sein. */
+export function hausRing(knoten: Knoten, anteile: HausAnteil[]): SVGTemplateResult | null {
+  const gesamt = anteile.reduce((summe, teil) => summe + Math.max(0, teil.anteil), 0)
+  if (gesamt <= 0) return null
+
+  const radius = knoten.r - 2
+  const umfang = 2 * Math.PI * radius
+  let gelaufen = 0
+
+  return svg`
+    <g aria-hidden="true" transform=${`rotate(-90 ${knoten.x} ${knoten.y})`}>
+      ${anteile.map((teil) => {
+        const laenge = (Math.max(0, teil.anteil) / gesamt) * umfang
+        const versatz = -gelaufen
+        gelaufen += laenge
+        if (laenge <= 0) return null
+        return svg`
+          <circle
+            class=${`haus-anteil ${teil.klasse}`}
+            cx=${knoten.x} cy=${knoten.y} r=${radius}
+            stroke-dasharray=${`${laenge.toFixed(1)} ${(umfang - laenge).toFixed(1)}`}
+            stroke-dashoffset=${versatz.toFixed(1)}
+          ></circle>
+        `
+      })}
+    </g>
+  `
+}
+
 /** Der Akzentring markiert ein Gerät, das gerade vom HEMS geregelt wird.
-    Zustand nie allein über Farbe: ein ruhendes Gerät bekommt zusätzlich
-    eine gestrichelte Linie und einen Untertitel. */
+    Zustand nie allein über Farbe: ein ruhendes Gerät bekommt zusätzlich eine
+    gestrichelte Linie und einen Untertitel. */
 export function akzentRing(knoten: Knoten, aktiv: boolean): SVGTemplateResult {
   return svg`
     <circle
@@ -114,4 +146,22 @@ export function akzentRing(knoten: Knoten, aktiv: boolean): SVGTemplateResult {
       aria-hidden="true"
     ></circle>
   `
+}
+
+/** Kleiner Richtungspfeil neben einem Wert im Knoten.
+
+    Bewusst ein gezeichnetes Dreieck statt eines Symbols: es bleibt bei 9 px
+    scharf, kostet kein weiteres `foreignObject` und trägt die Richtung auch
+    dann, wenn sich nichts bewegt (`prefers-reduced-motion`). */
+export function richtungsPfeil(
+  x: number, y: number, richtung: 'hoch' | 'runter' | 'links' | 'rechts',
+): SVGTemplateResult {
+  const g = 4
+  const punkte: Record<string, string> = {
+    hoch: `${x} ${y - g}, ${x - g} ${y + g}, ${x + g} ${y + g}`,
+    runter: `${x} ${y + g}, ${x - g} ${y - g}, ${x + g} ${y - g}`,
+    links: `${x - g} ${y}, ${x + g} ${y - g}, ${x + g} ${y + g}`,
+    rechts: `${x + g} ${y}, ${x - g} ${y - g}, ${x - g} ${y + g}`,
+  }
+  return svg`<polygon class="pfeil" points=${punkte[richtung]} aria-hidden="true"></polygon>`
 }

@@ -2,12 +2,11 @@ import { css } from 'lit'
 
 /* Token-Definition genau einmal, am Wurzelelement. Danach nur noch var(--…).
 
-   Grundlage sind die Theme-Variablen von Home Assistant: die Karte folgt
-   damit jedem Theme in beiden Modi, ohne eine eigene Hell/Dunkel-Umschaltung
-   zu brauchen (D-006). Die --energy-*-Variablen sind die Farben, die HA für
-   seine eigenen Energiekarten setzt — sie zu verwenden lässt die Karte im
-   Dashboard zu Hause wirken. Der Rückfallwert greift, wenn ein Theme sie
-   nicht kennt. */
+   Grundlage sind die Theme-Variablen von Home Assistant: die Karte folgt damit
+   jedem Theme in beiden Modi, ohne eine eigene Hell/Dunkel-Umschaltung zu
+   brauchen (D-006). Die --energy-*-Variablen sind die Farben, die HA für seine
+   eigenen Energiekarten setzt — sie zu verwenden lässt die Karte im Dashboard
+   zu Hause wirken. Der Rückfallwert greift, wenn ein Theme sie nicht kennt. */
 
 export const styles = css`
   :host {
@@ -16,21 +15,30 @@ export const styles = css`
     --spfc-text-2:  var(--secondary-text-color, #727272);
     --spfc-border:  var(--divider-color, #e0e0e0);
 
-    --spfc-pv:      var(--energy-solar-color, #ff9800);
-    --spfc-grid:    var(--energy-grid-consumption-color, #488fc2);
-    --spfc-export:  var(--energy-grid-return-color, #8353d1);
-    --spfc-battery: var(--energy-battery-out-color, #4db6ac);
-    --spfc-house:   var(--energy-non-fossil-color, #0f9d58);
+    --spfc-pv:          var(--energy-solar-color, #ff9800);
+    --spfc-grid:        var(--energy-grid-consumption-color, #488fc2);
+    --spfc-export:      var(--energy-grid-return-color, #8353d1);
+    --spfc-battery:     var(--energy-battery-out-color, #4db6ac);
+    --spfc-battery-in:  var(--energy-battery-in-color, #f06292);
+    --spfc-house:       var(--energy-non-fossil-color, #0f9d58);
 
     --spfc-accent:  #18bcf2;
     --spfc-unknown: var(--disabled-text-color, #bdbdbd);
     --spfc-warn:    var(--warning-color, #ff9800);
 
+    /* Gerätefarben. Vier reichen: darüber hinaus wiederholt sich der Kranz,
+       und die Zugehörigkeit trägt ohnehin die Beschriftung. */
+    --spfc-geraet-1: #d0cc5b;
+    --spfc-geraet-2: #964cb5;
+    --spfc-geraet-3: #b54c9d;
+    --spfc-geraet-4: #5bd0cc;
+
     display: block;
   }
 
   ha-card {
-    padding: 12px 12px 16px;
+    padding: 8px 8px 12px;
+    overflow: hidden;
   }
 
   .kopf {
@@ -38,7 +46,7 @@ export const styles = css`
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
-    padding: 4px 4px 10px;
+    padding: 6px 8px 4px;
   }
 
   .titel {
@@ -77,24 +85,47 @@ export const styles = css`
     display: block;
     width: 100%;
     height: auto;
-    overflow: visible;
   }
+
+  /* ---------- Kanten ---------- */
 
   .kante {
     fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
     stroke-linecap: round;
+    stroke-linejoin: round;
   }
+
+  /* Ein Nullfluss löscht die Linie nicht, er dämpft sie. Das Gerüst der
+     Grafik bleibt damit stehen, statt bei jedem Nulldurchgang zu flackern. */
+  .kante.ruhend {
+    stroke: var(--spfc-unknown);
+    opacity: 0.45;
+  }
+
+  .punkt {
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 4;
+  }
+
+  /* ---------- Knoten ---------- */
 
   .knoten-flaeche {
     fill: var(--spfc-surface);
-    stroke: var(--spfc-border);
-    stroke-width: 1.5;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+
+  .knoten-flaeche.randlos {
+    stroke: none;
   }
 
   .knoten-ring {
     fill: none;
     stroke: var(--spfc-accent);
-    stroke-width: 2.5;
+    stroke-width: 2;
   }
 
   .knoten-ring.ruhend {
@@ -105,15 +136,27 @@ export const styles = css`
   .soc-bahn {
     fill: none;
     stroke: var(--spfc-border);
-    stroke-width: 3;
+    stroke-width: 4;
   }
 
   .soc-fuellung {
     fill: none;
     stroke: var(--spfc-battery);
-    stroke-width: 3;
-    stroke-linecap: round;
+    stroke-width: 4;
+    stroke-linecap: butt;
   }
+
+  .haus-anteil {
+    fill: none;
+    stroke-width: 4;
+    /* Wechselt der Verbrauch die Herkunft, wandert der Ring weich mit,
+       statt zu springen. */
+    transition: stroke-dasharray 0.4s, stroke-dashoffset 0.4s;
+  }
+
+  .haus-anteil.von-pv      { stroke: var(--spfc-pv); }
+  .haus-anteil.von-batterie { stroke: var(--spfc-battery); }
+  .haus-anteil.von-netz    { stroke: var(--spfc-grid); }
 
   .knoten {
     cursor: default;
@@ -129,15 +172,19 @@ export const styles = css`
     border-radius: 50%;
   }
 
+  /* ---------- Text ---------- */
+
   .beschriftung {
-    fill: var(--spfc-text);
+    fill: var(--spfc-text-2);
     text-anchor: middle;
-    font-weight: 500;
+    font-size: 12px;
   }
 
   .wert {
-    fill: var(--spfc-text-2);
+    fill: currentColor;
     text-anchor: middle;
+    font-size: 12px;
+    font-weight: 500;
   }
 
   .wert.unbekannt {
@@ -147,19 +194,25 @@ export const styles = css`
   .untertitel {
     fill: var(--spfc-unknown);
     text-anchor: middle;
+    font-size: 11px;
   }
 
-  .punkt {
+  .pfeil {
     fill: currentColor;
   }
 
   .symbol {
-    color: var(--spfc-text-2);
-    --mdc-icon-size: 22px;
+    color: currentColor;
+    --mdc-icon-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
   }
 
-  /* Bewegung ist eine Zugabe, kein Informationsträger: die Flussrichtung
-     bleibt an den Pfeilspitzen ablesbar. */
+  /* Bewegung ist eine Zugabe, kein Informationsträger: die Richtung bleibt an
+     den Pfeilen in den Knoten ablesbar. */
   @media (prefers-reduced-motion: reduce) {
     .punkt {
       display: none;

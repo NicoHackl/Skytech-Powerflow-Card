@@ -27,6 +27,9 @@ export interface Anzeige {
   watt_schwelle?: number
   animation?: boolean
   haus_knoten_anzeigen?: boolean
+  /** Obergrenze des Erwartungsbereichs für die Punktgeschwindigkeit. Additiv
+      ergänzt; fehlt sie, nimmt die Karte einen Standardwert an. */
+  max_erwartete_leistung_w?: number
 }
 
 export interface Batterie {
@@ -44,6 +47,10 @@ export interface Batterie {
 export interface Standard {
   /** Wird summiert. Leer heißt: kein Erzeugungsknoten. */
   pv_power_entities?: string[]
+  /** Wird ausdrücklich **nicht** summiert: nur Aufschlüsselung am Knoten.
+      So lassen sich Systemleistung und einzelne Strings nebeneinander
+      eintragen, ohne die Erzeugung zu verdoppeln. */
+  pv_detail_entities?: string[]
   pv_label?: string
   grid_power_entity?: string
   grid_power_sign?: GridPowerSign | string
