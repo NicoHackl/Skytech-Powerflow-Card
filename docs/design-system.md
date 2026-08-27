@@ -158,6 +158,19 @@ Renderlauf ändern; eine CSS-Klasse dafür gäbe es nicht.
 Die einzige Ausnahme bei Farbe ist `devices[].farbe`: der Benutzer trägt sie im HEMS-Panel ein,
 sie kann deshalb nicht als Token vorliegen. Sie wirkt nur auf den Rand des betreffenden Knotens.
 
+## Speicherknoten
+
+Der Hausspeicher und jeder AC-Speicher werden gleich gezeichnet:
+
+- Ein Ring um den Knoten zeigt den **Ladestand**, die Prozentzahl steht als Untertitel darunter.
+- Der Wert steht als **Betrag** im Kreis, mit Richtungspfeil: nach unten beim Laden, nach oben beim
+  Einspeisen. Eine vorzeichenbehaftete Zahl an einem Knoten ließe offen, ob sie Einspeisung oder
+  Messfehler ist.
+- Die Farbe folgt der Richtung: `--spfc-battery-in` beim Laden, `--spfc-battery` beim Entladen.
+
+Ein AC-Speicher trägt zusätzlich den **Akzentring** jedes HEMS-Geräts und, wenn er gerade nicht
+mitregelt, den Grund als zweite Untertitelzeile.
+
 ## Zustände
 
 **Zustand wird nie allein über Farbe transportiert.** Jeder Zustand, den eine Farbe trägt, hat

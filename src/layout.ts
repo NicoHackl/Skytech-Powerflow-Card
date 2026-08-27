@@ -11,7 +11,11 @@
 
    Reine Rechnerei ohne DOM — die Testbarkeit hängt daran. */
 
-export type KnotenArt = 'pv' | 'netz' | 'haus' | 'batterie' | 'geraet' | 'rest' | 'verteiler'
+export type KnotenArt =
+  | 'pv' | 'netz' | 'haus' | 'batterie' | 'geraet' | 'rest' | 'verteiler'
+  /** AC-Speicher aus der Geräteliste — steht beim Hausspeicher, nicht bei den
+      Verbrauchern, weil er das Haus auch speisen kann. */
+  | 'speicher'
 
 /** Wo die Beschriftung steht. Über dem Kreis in der obersten Reihe, damit sie
     nicht zwischen Knoten und abgehender Linie liegt — wie im Vorbild. */
@@ -54,7 +58,10 @@ export interface LayoutEingabe {
   netz: boolean
   batterie: boolean
   hausKnoten: boolean
+  /** Verbraucher. AC-Speicher gehören NICHT hierher. */
   geraeteIds: string[]
+  /** AC-Speicher, in der Reihenfolge des Vertrags. */
+  speicherIds?: string[]
   rest: boolean
   /** Gemessene Breite der Karte. Sie entscheidet über den Maßstab. */
   breite: number
@@ -157,9 +164,11 @@ export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
   // normale verkleinert. Eine verkleinerte Zeichnung nimmt die Schrift mit.
   const mass = mindestBreite(NORMAL, spaltenAnzahl) <= eingabe.breite ? NORMAL : KOMPAKT
 
-  /* Der Stamm trägt Erzeugung, Netz, Haus und Speicher. Fehlt einer davon,
-     rücken die übrigen zusammen — es entsteht kein Loch. */
+  /* Der Stamm trägt Erzeugung, Netz, Haus und die Speicher. Fehlt einer
+     davon, rücken die übrigen zusammen — es entsteht kein Loch. */
+  const speicherIds = eingabe.speicherIds ?? []
   const stammZeilen = (eingabe.pv ? 1 : 0) + 1 + (eingabe.batterie ? 1 : 0)
+    + speicherIds.length
   const zeilen = Math.max(stammZeilen, proSpalte, 1)
 
   const spalte = spaltenBreite(mass, eingabe.breite, spaltenAnzahl)
@@ -196,7 +205,10 @@ export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
   setze(eingabe.hausKnoten ? 'haus' : 'verteiler',
     eingabe.hausKnoten ? 'haus' : 'verteiler', 2, mitteZeile)
   zeile += 1
-  if (eingabe.batterie) setze('batterie', 'batterie', 1, zeile)
+  if (eingabe.batterie) setze('batterie', 'batterie', 1, zeile++)
+  // Die AC-Speicher stehen unter dem Hausspeicher, in derselben Spalte. Ist
+  // keiner konfiguriert, rücken sie an dessen Stelle.
+  for (const id of speicherIds) setze(id, 'speicher', 1, zeile++)
 
   rechts.forEach((id, index) => {
     const spalteIndex = 3 + Math.floor(index / proSpalte)

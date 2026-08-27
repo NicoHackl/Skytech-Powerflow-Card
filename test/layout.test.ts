@@ -272,3 +272,54 @@ describe('Beschriftung und Untertitel', () => {
     })
   }
 })
+
+describe('AC-Speicher', () => {
+  test('stehen in der Spalte des Hausspeichers, eine Zeile darunter', () => {
+    const geometrie = baueGeometrie(eingabe({
+      breite: 600, geraeteIds: geraete(2), speicherIds: ['acspeicher1'],
+    }))
+    const haus = findeKnoten(geometrie, 'batterie')!
+    const ac = findeKnoten(geometrie, 'acspeicher1')!
+    expect(ac.x).toBe(haus.x)
+    expect(ac.y).toBeGreaterThan(haus.y)
+  })
+
+  test('stehen nicht in der Gerätespalte', () => {
+    const geometrie = baueGeometrie(eingabe({
+      breite: 600, geraeteIds: geraete(2), speicherIds: ['acspeicher1'],
+    }))
+    const geraet = findeKnoten(geometrie, 'geraet_1')!
+    expect(findeKnoten(geometrie, 'acspeicher1')!.x).toBeLessThan(geraet.x)
+  })
+
+  test('ohne Hausspeicher stehen sie an dessen Stelle', () => {
+    const geometrie = baueGeometrie(eingabe({
+      breite: 600, batterie: false, speicherIds: ['acspeicher1'],
+    }))
+    const mitHausspeicher = findeKnoten(
+      baueGeometrie(eingabe({ breite: 600 })), 'batterie')!
+    expect(findeKnoten(geometrie, 'acspeicher1')!.x).toBe(mitHausspeicher.x)
+  })
+
+  test('mehrere Speicher stapeln sich untereinander', () => {
+    const geometrie = baueGeometrie(eingabe({
+      breite: 600, speicherIds: ['a', 'b'],
+    }))
+    const a = findeKnoten(geometrie, 'a')!
+    const b = findeKnoten(geometrie, 'b')!
+    expect(b.x).toBe(a.x)
+    expect(b.y).toBeGreaterThan(a.y)
+    expect(ueberschneidungsfrei(geometrie)).toBe(true)
+  })
+
+  test('die zusätzliche Zeile überlappt nichts', () => {
+    for (const anzahl of [1, 2]) {
+      const geometrie = baueGeometrie(eingabe({
+        breite: 340, geraeteIds: geraete(4), rest: true,
+        speicherIds: Array.from({ length: anzahl }, (_, i) => `speicher_${i}`),
+      }))
+      expect(ueberschneidungsfrei(geometrie), `${anzahl} Speicher`).toBe(true)
+      expect(geometrie.breite, `${anzahl} Speicher`).toBeLessThanOrEqual(340)
+    }
+  })
+})

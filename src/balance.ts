@@ -19,12 +19,27 @@ export interface GeraetFluss {
   fluss: number
 }
 
+/** Ein AC-Speicher aus der Geräteliste, aufgelöst in Beträge.
+
+    Er ist ein HEMS-Gerät, aber kein Verbraucher: er kann das Haus auch
+    speisen. Deshalb steht er nicht in `geraete`. */
+export interface SpeicherFluss {
+  id: string
+  /** Der aufgelöste, VORZEICHENBEHAFTETE Wert — positiv laden. */
+  leistung: Aufloesung
+  /** Beträge, wie sie angezeigt werden. Genau einer ist größer als 0. */
+  laden: number
+  entladen: number
+}
+
 export interface BilanzEingabe {
   pv: Aufloesung
   netz: Richtungen
   batterie: Richtungen
   haus: Aufloesung
   geraete: GeraetEingabe[]
+  /** AC-Speicher aus der Geräteliste. Positiv heißt laden, negativ speisen. */
+  speicher?: GeraetEingabe[]
 }
 
 /** Was am Kartenkopf zusätzlich gemeldet werden muss. */
@@ -40,6 +55,8 @@ export interface Bilanz {
   /** Hausverbrauch abzüglich der HEMS-Geräte. */
   uebrigesHaus: number
   geraete: GeraetFluss[]
+  /** AC-Speicher, je mit Betrag und Richtung. */
+  speicher: SpeicherFluss[]
 
   pvInsHaus: number
   pvInBatterie: number
@@ -65,7 +82,23 @@ export function berechneBilanz(eingabe: BilanzEingabe): Bilanz {
   const laden = eingabe.batterie.hin.wert ?? 0
   const entladen = eingabe.batterie.her.wert ?? 0
 
-  const haus = hausLeistung(eingabe, pvWert, netzbezug, netzeinspeisung, laden, entladen, hinweise)
+  // AC-Speicher sind HEMS-Geräte, aber keine Verbraucher: ein entladender
+  // speist das Haus. Sie werden deshalb getrennt geführt und weder gedeckelt
+  // noch von der Hausleistung abgezogen.
+  const speicher: SpeicherFluss[] = (eingabe.speicher ?? []).map((eintrag) => {
+    const wert = eintrag.leistung.wert ?? 0
+    return {
+      id: eintrag.id,
+      leistung: eintrag.leistung,
+      laden: Math.max(0, wert),
+      entladen: Math.max(0, -wert),
+    }
+  })
+  const acLaden = speicher.reduce((summe, eintrag) => summe + eintrag.laden, 0)
+  const acEntladen = speicher.reduce((summe, eintrag) => summe + eintrag.entladen, 0)
+
+  const haus = hausLeistung(eingabe, pvWert, netzbezug, netzeinspeisung,
+    laden + acLaden, entladen + acEntladen, hinweise)
   const hausWert = haus.wert
 
   const geraete = deckele(eingabe.geraete, hausWert, hinweise)
@@ -78,7 +111,9 @@ export function berechneBilanz(eingabe: BilanzEingabe): Bilanz {
   const basis = hausWert ?? 0
   const pvInsHaus = Math.min(Math.max(pvWert ?? 0, 0), basis)
   const rest = basis - pvInsHaus
-  const batterieInsHaus = Math.min(entladen, rest)
+  // Speicherstrom ins Haus ist Speicherstrom, gleich aus welchem Speicher —
+  // der Herkunftsring am Hausknoten kennt nur die Quellenart.
+  const batterieInsHaus = Math.min(entladen + acEntladen, rest)
   const netzInsHaus = Math.max(0, rest - batterieInsHaus)
 
   // Verbleib der Erzeugung.
@@ -90,7 +125,7 @@ export function berechneBilanz(eingabe: BilanzEingabe): Bilanz {
   return {
     pv: eingabe.pv,
     netzbezug, netzeinspeisung, laden, entladen,
-    haus, uebrigesHaus, geraete,
+    haus, uebrigesHaus, geraete, speicher,
     pvInsHaus, pvInBatterie, pvInsNetz, netzInsHaus, netzInBatterie, batterieInsHaus,
     hinweise,
   }

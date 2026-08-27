@@ -150,3 +150,60 @@ describe('Kanten', () => {
     expect(bilanz.netzInsHaus).toBe(1000)
   })
 })
+
+describe('AC-Speicher', () => {
+  // Ein AC-Speicher ist ein HEMS-Gerät, aber kein Verbraucher: er kann das
+  // Haus auch speisen. Vorher wurde er über max(0, Wert) auf 0 gedeckelt —
+  // der Knoten zeigte eine negative Zahl und hing an keiner Linie.
+  const speicher = (wert: number) => [{ id: 'acspeicher1', leistung: direkt(wert) }]
+
+  test('ein entladender Speicher erhöht die gerechnete Hausleistung', () => {
+    const ohne = berechneBilanz(eingabe({ pv: direkt(1000) }))
+    const mit = berechneBilanz(eingabe({ pv: direkt(1000), speicher: speicher(-607) }))
+    expect(mit.haus.wert).toBe((ohne.haus.wert ?? 0) + 607)
+  })
+
+  test('ein ladender Speicher senkt sie', () => {
+    const bilanz = berechneBilanz(eingabe({ pv: direkt(2000), speicher: speicher(800) }))
+    expect(bilanz.haus.wert).toBe(1200)
+  })
+
+  test('der Betrag ist in beiden Richtungen positiv', () => {
+    expect(berechneBilanz(eingabe({ pv: direkt(1000), speicher: speicher(-607) }))
+      .speicher[0]).toMatchObject({ laden: 0, entladen: 607 })
+    expect(berechneBilanz(eingabe({ pv: direkt(2000), speicher: speicher(800) }))
+      .speicher[0]).toMatchObject({ laden: 800, entladen: 0 })
+  })
+
+  test('der Speicher wird nicht auf 0 gedeckelt', () => {
+    // Selbst wenn die Hausleistung klein ist: der Speicher hängt nicht am
+    // Hausknoten und unterliegt der Deckelung nicht.
+    const bilanz = berechneBilanz(eingabe({
+      pv: direkt(100), haus: direkt(50), speicher: speicher(-607),
+    }))
+    expect(bilanz.speicher[0]!.entladen).toBe(607)
+    expect(bilanz.hinweise).not.toContain('geraete_ueber_haus')
+  })
+
+  test('der Speicher zählt nicht in „übriges Haus"', () => {
+    const bilanz = berechneBilanz(eingabe({
+      haus: direkt(1000), speicher: speicher(800),
+      geraete: [{ id: 'heizstab', leistung: direkt(400) }],
+    }))
+    expect(bilanz.uebrigesHaus).toBe(600)
+  })
+
+  test('Speicherstrom ins Haus füllt den Herkunftsring, egal aus welchem Speicher', () => {
+    const bilanz = berechneBilanz(eingabe({
+      pv: direkt(0), haus: direkt(1000), speicher: speicher(-400),
+      batterie: { hin: direkt(0), her: direkt(200) },
+    }))
+    expect(bilanz.batterieInsHaus).toBe(600)
+  })
+
+  test('ohne Speicher bleibt die Bilanz unverändert', () => {
+    const bilanz = berechneBilanz(eingabe({ pv: direkt(1000) }))
+    expect(bilanz.speicher).toEqual([])
+    expect(bilanz.haus.wert).toBe(1000)
+  })
+})
