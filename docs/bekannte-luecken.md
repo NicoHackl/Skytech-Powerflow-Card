@@ -23,6 +23,9 @@ belegt — sie werden nicht als erfüllt gemeldet, bis sie geprüft sind:
 
 Dinge, die schon einmal Zeit gekostet haben:
 
+- **Ein Navigationsziel wird nicht auf Existenz geprüft.** Zeigt es auf eine gelöschte Ansicht,
+  meldet Home Assistant das nach dem Klick selbst. Die Karte kann es nicht wissen — sie kennt die
+  Dashboards nicht.
 - **Die Karte kennt ihre eigene Breite nur über einen `ResizeObserver`.** Vor der ersten Messung
   rechnet sie mit 480 px. In einer Umgebung ohne `ResizeObserver` bleibt es dabei — die Zeichnung
   ist dann nicht auf die Spalte abgestimmt, aber vollständig.

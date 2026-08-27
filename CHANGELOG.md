@@ -11,6 +11,27 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+## [0.2.3] — 27.08.2026
+
+### Hinzugefügt
+
+- **Ein Klick auf einen Knoten kann auf eine Dashboard-Ansicht springen.** Je Knoten — Erzeugung,
+  Netz, Haus, Übriges Haus, Batterie und je Gerät — lässt sich im HEMS-Panel ein Ziel hinterlegen.
+  Ohne Ziel öffnet der Klick wie bisher den More-Info-Dialog.
+- Ein Knoten mit Ziel trägt `role="link"`, und seine Vorlesebeschreibung endet auf „öffnet eine
+  andere Seite" — sonst merkt man den Seitenwechsel erst hinterher.
+
+### Behoben
+
+- **„Übriges Haus" war nicht anklickbar.** Die Karte machte Klickbarkeit an einer Leitentität
+  fest, und dieser Knoten hat keine. Mit einem Ziel ist er es jetzt.
+
+### Sicherheit
+
+- Die Karte prüft ein Navigationsziel erneut, obwohl das Add-on es schon prüft: nur Pfade
+  innerhalb derselben Home-Assistant-Instanz. `http://…` und `javascript:…` werden abgelehnt und
+  fallen auf den More-Info-Dialog zurück.
+
 ## [0.2.2] — 27.08.2026
 
 ### Geändert

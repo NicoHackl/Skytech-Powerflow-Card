@@ -5,7 +5,7 @@ import {
   type CardConfig, type Device, type FlowConfig, type FlowStatus, type Hass,
 } from './types'
 import {
-  abonnierteEntitaeten, hatSichGeaendert, leseVertrag, zustandsAbzug,
+  abonnierteEntitaeten, hatSichGeaendert, istSicheresZiel, leseVertrag, zustandsAbzug,
   type Vertrag, type VertragsFehler,
 } from './contract'
 import {
@@ -478,6 +478,7 @@ export class SkytechPowerFlowCard extends LitElement {
             untertitel: this._pvAufschluesselung(standard, schwelle),
             untertitelBreit: true,
             leitEntitaet: (standard.pv_power_entities ?? [])[0],
+            ziel: standard.pv_navigation,
             schwelle,
           })
         case 'netz':
@@ -487,6 +488,7 @@ export class SkytechPowerFlowCard extends LitElement {
             farbe: bilanz.netzeinspeisung > bilanz.netzbezug ? '--spfc-export' : '--spfc-grid',
             werte: this._netzWerte(bilanz),
             leitEntitaet: standard.grid_power_entity || standard.grid_import_entity,
+            ziel: standard.grid_navigation,
             schwelle,
           })
         case 'haus':
@@ -499,6 +501,7 @@ export class SkytechPowerFlowCard extends LitElement {
             ring: hausRing(knoten, this._hausAnteile(bilanz)),
             randlos: true,
             leitEntitaet: standard.house_power_entity,
+            ziel: standard.house_navigation,
             schwelle,
           })
         case 'batterie': {
@@ -512,6 +515,7 @@ export class SkytechPowerFlowCard extends LitElement {
             zusatz: soc === null ? '' : `Ladestand ${prozent(soc)}`,
             untertitel: soc === null ? '' : prozent(soc),
             leitEntitaet: standard.batterie?.soc_entity,
+            ziel: standard.batterie?.navigation,
             schwelle,
           })
         }
@@ -521,6 +525,7 @@ export class SkytechPowerFlowCard extends LitElement {
             beschriftung: 'Übriges Haus',
             farbe: '--spfc-house',
             werte: [{ wert: { wert: bilanz.uebrigesHaus, quelle: 'direkt' } }],
+            ziel: standard.rest_navigation,
             schwelle,
           })
         case 'speicher': {
@@ -648,6 +653,7 @@ export class SkytechPowerFlowCard extends LitElement {
         aktiv ? 'vom HEMS geregelt' : grund,
       ].filter(Boolean).join(', '),
       leitEntitaet: device?.soc_entity || device?.power_entity,
+      ziel: device?.navigation,
       schwelle,
     })
   }
@@ -670,6 +676,7 @@ export class SkytechPowerFlowCard extends LitElement {
       farbeRoh: device?.farbe || '',
       werte: [{ wert: wert ?? { wert: null, quelle: 'unbekannt' } }],
       leitEntitaet: device?.power_entity || device?.switch_entity,
+      ziel: device?.navigation,
       ringElement: akzentRing(knoten, aktiv),
       untertitel: grund,
       zusatz: aktiv ? 'vom HEMS geregelt' : grund,
@@ -680,7 +687,8 @@ export class SkytechPowerFlowCard extends LitElement {
   private _zeichneKnoten(
     knoten: Knoten, mass: Massstab, spalte: number, teil: KnotenTeil,
   ): SVGTemplateResult {
-    const klickbar = Boolean(teil.leitEntitaet)
+    const ziel = istSicheresZiel(teil.ziel) ? teil.ziel! : ''
+    const klickbar = Boolean(ziel || teil.leitEntitaet)
     const farbe = teil.farbeRoh || `var(${teil.farbe})`
     const inhalt = knotenInhalt(mass, teil.werte.length)
 
@@ -708,17 +716,19 @@ export class SkytechPowerFlowCard extends LitElement {
       ...teil.werte.map((eintrag) => leistungGesprochen(eintrag.wert.wert, teil.schwelle)),
       teil.werte.some((eintrag) => eintrag.wert.quelle === 'status') ? 'aus dem HEMS-Status' : '',
       teil.zusatz ?? '',
+      // Eine Vorlesestimme muss wissen, dass der Klick die Seite wechselt.
+      ziel ? 'öffnet eine andere Seite' : '',
     ].filter(Boolean).join(', ')
 
     return svg`
       <g
         class=${`knoten${klickbar ? ' klickbar' : ''}`}
         style=${`color: ${farbe}`}
-        role=${klickbar ? 'button' : 'group'}
+        role=${klickbar ? (ziel ? 'link' : 'button') : 'group'}
         tabindex=${klickbar ? '0' : nothing}
         aria-label=${beschreibung}
-        @click=${() => this._oeffneDialog(teil.leitEntitaet)}
-        @keydown=${(event: KeyboardEvent) => this._taste(event, teil.leitEntitaet)}
+        @click=${() => this._klick(ziel, teil.leitEntitaet)}
+        @keydown=${(event: KeyboardEvent) => this._taste(event, ziel, teil.leitEntitaet)}
       >
         <circle
           class=${`knoten-flaeche${teil.randlos ? ' randlos' : ''}`}
@@ -809,6 +819,23 @@ export class SkytechPowerFlowCard extends LitElement {
      Interaktion — ausschließlich lesend
      --------------------------------------------------------------------- */
 
+  /** Ist ein Ziel gesetzt, wird navigiert; sonst öffnet der More-Info-Dialog. */
+  private _klick(ziel: string, entityId?: string): void {
+    if (ziel) {
+      this._navigiere(ziel)
+      return
+    }
+    this._oeffneDialog(entityId)
+  }
+
+  /** Seitenwechsel auf dem Weg, den das HA-Frontend selbst geht. */
+  private _navigiere(pfad: string): void {
+    history.pushState(null, '', pfad)
+    const ereignis = new Event('location-changed', { bubbles: true, composed: true })
+    ;(ereignis as Event & { detail?: unknown }).detail = { replace: false }
+    this.dispatchEvent(ereignis)
+  }
+
   private _oeffneDialog(entityId?: string): void {
     if (!entityId) return
     const ereignis = new Event('hass-more-info', { bubbles: true, composed: true })
@@ -816,11 +843,11 @@ export class SkytechPowerFlowCard extends LitElement {
     this.dispatchEvent(ereignis)
   }
 
-  private _taste(event: KeyboardEvent, entityId?: string): void {
-    if (!entityId) return
+  private _taste(event: KeyboardEvent, ziel: string, entityId?: string): void {
+    if (!ziel && !entityId) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
-    this._oeffneDialog(entityId)
+    this._klick(ziel, entityId)
   }
 }
 
@@ -839,6 +866,8 @@ interface KnotenTeil {
   /** Vom Benutzer im HEMS gesetzte Farbe. Sie schlägt die Palette. */
   farbeRoh?: string
   leitEntitaet?: string
+  /** Dashboard-Ansicht, auf die ein Klick springt. Leer = More-Info-Dialog. */
+  ziel?: string
   ring?: SVGTemplateResult | null
   ringElement?: SVGTemplateResult | null
   randlos?: boolean

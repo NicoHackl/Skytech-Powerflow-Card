@@ -62,6 +62,23 @@ Erzeugung und Netz, weil die Karte seinen Anteil aus der Gesamtbilanz herleiten 
 AC-Speicher bekommt dagegen **eine** Kante zum Hausknoten. Woher er lädt, steht nirgends im
 Vertrag; es aufzuteilen hieße, es zu erfinden.
 
+## Navigationsziele
+
+Je Knoten kann der Vertrag eine Dashboard-Ansicht tragen, auf die ein Klick springt:
+`standard.pv_navigation`, `grid_navigation`, `house_navigation`, `rest_navigation`,
+`standard.batterie.navigation` und `devices[].navigation`. Leer heißt: der Klick öffnet wie bisher
+den More-Info-Dialog der Leitentität.
+
+Gepflegt werden die Ziele im HEMS-Panel — die Karte bleibt ohne Dashboard-Konfiguration.
+
+**Die Karte prüft den Pfad selbst** (`istSicheresZiel()` in `src/contract.ts`), obwohl der Erzeuger
+dasselbe prüft: nur beginnend mit `/`, nicht mit `//`, ohne Doppelpunkt und ohne Leerraum. Sie
+springt nicht ungeprüft dorthin, wohin ein Attributwert zeigt. Ein abgelehntes Ziel ist kein
+Fehler — der Knoten öffnet dann den More-Info-Dialog.
+
+Ein Knoten mit Ziel ist auch dann anklickbar, wenn er **keine** Leitentität hat. „Übriges Haus"
+war deshalb bisher gar nicht anklickbar.
+
 ## Drei Zustände jedes Werts
 
 | Zustand | Wann | Darstellung |
