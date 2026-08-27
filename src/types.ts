@@ -34,6 +34,7 @@ export interface Anzeige {
 
 export interface Batterie {
   label?: string
+  navigation?: string
   soc_entity?: string
   capacity_kwh?: number | null
   /** Variante A. Es gilt entweder dies oder das Paar unten, nie beides. */
@@ -60,6 +61,14 @@ export interface Standard {
   /** Leer heißt: die Karte rechnet die Hausleistung selbst aus. */
   house_power_entity?: string
   house_label?: string
+
+  /* Navigationsziele je Knoten. Leer heißt: Klick öffnet den More-Info-Dialog.
+     Zulässig ist nur ein Pfad innerhalb derselben HA-Instanz — die Karte prüft
+     das selbst, siehe `istSicheresZiel()`. */
+  pv_navigation?: string
+  grid_navigation?: string
+  house_navigation?: string
+  rest_navigation?: string
   /** `null` oder fehlend heißt: kein Batterieknoten. */
   batterie?: Batterie | null
 }
@@ -84,6 +93,8 @@ export interface Device {
   power_kind?: PowerKind | string
   icon?: string
   farbe?: string
+  /** Dashboard-Ansicht, auf die ein Klick auf diesen Knoten springt. */
+  navigation?: string
   reihenfolge?: number
 
   power_entity?: string

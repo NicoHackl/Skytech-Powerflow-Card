@@ -230,6 +230,15 @@ CDN-Aufruf. Trägt ein Gerät kein eigenes Symbol, wählt die Karte eines nach `
 Symbole sind Dekoration: sie tragen `aria-hidden="true"`, die Bedeutung steht im `aria-label` des
 Knotens.
 
+## Knoten mit Ziel
+
+Trägt ein Knoten ein Navigationsziel, wechselt der Klick die Seite, statt den More-Info-Dialog zu
+öffnen. Das ist am Knoten nicht zu sehen — deshalb:
+
+- Er trägt `role="link"` statt `role="button"`.
+- Sein `aria-label` endet auf „öffnet eine andere Seite". Ohne diesen Zusatz erführe eine
+  Vorlesestimme erst nach dem Klick, dass die Seite gewechselt hat.
+
 ## Barrierefreiheit
 
 - Das SVG trägt `role="img"` und ein `aria-label` mit der **Zusammenfassung der Bilanz**, damit

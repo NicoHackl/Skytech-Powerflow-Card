@@ -134,3 +134,16 @@ function kennwert(hass: Hass, id: string, statusEntity: string): string {
   const status = entity.attributes as FlowStatus | undefined
   return `${entity.state}|${status?.last_cycle_at ?? ''}`
 }
+
+/** Zeigt dieser Pfad in dieselbe Home-Assistant-Instanz?
+
+    Der Vertrag kommt aus dem eigenen Add-on und prüft dasselbe — die Karte
+    springt trotzdem nicht ungeprüft dorthin, wohin ein Attributwert zeigt.
+    `//host/…` wäre protokollrelativ, ein Doppelpunkt ließe `http://…` und
+    `javascript:…` durch. */
+export function istSicheresZiel(pfad: string | undefined | null): boolean {
+  if (!pfad) return false
+  if (!pfad.startsWith('/') || pfad.startsWith('//')) return false
+  if (pfad.includes(':')) return false
+  return !/\s/.test(pfad)
+}
