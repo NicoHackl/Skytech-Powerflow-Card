@@ -12,7 +12,9 @@ import {
   batterieLeistung, geraeteLeistung, hausLeistung, ladestand, netzLeistung, pvLeistung,
   type Aufloesung,
 } from './power'
-import { berechneBilanz, type Bilanz, type Hinweis } from './balance'
+import {
+  berechneBilanz, type Bilanz, type Hinweis, type SpeicherFluss,
+} from './balance'
 import {
   baueGeometrie, findeKnoten, knotenInhalt,
   type Geometrie, type KnotenInhalt, type Massstab, type Knoten,
@@ -60,6 +62,16 @@ const zeichenBreite = (schrift: number) => schrift * ZEICHEN_FAKTOR
 
 /** So viele Erzeugungszeilen passen unter den Knoten. */
 const PV_DETAIL_MAX = 2
+
+/** Ein AC-Speicher ist ein HEMS-Gerät, aber kein Verbraucher: er kann das
+    Haus speisen. Er wird deshalb beim Hausspeicher gezeichnet (D-010). */
+function acSpeicher(config: FlowConfig): Device[] {
+  return (config.devices ?? []).filter((device) => device.class === 'battery')
+}
+
+function verbraucher(config: FlowConfig): Device[] {
+  return (config.devices ?? []).filter((device) => device.class !== 'battery')
+}
 
 const GERAETE_FARBEN = [
   '--spfc-geraet-1', '--spfc-geraet-2', '--spfc-geraet-3', '--spfc-geraet-4',
@@ -343,15 +355,17 @@ export class SkytechPowerFlowCard extends LitElement {
 
   private _bilanz(config: FlowConfig, status: FlowStatus | null): Bilanz {
     const standard = config.standard
+    const aufloesen = (device: Device) => ({
+      id: device.id,
+      leistung: geraeteLeistung(this._hass, device, status),
+    })
     return berechneBilanz({
       pv: pvLeistung(this._hass, standard),
       netz: netzLeistung(this._hass, standard),
       batterie: batterieLeistung(this._hass, standard?.batterie),
       haus: hausLeistung(this._hass, standard),
-      geraete: (config.devices ?? []).map((device) => ({
-        id: device.id,
-        leistung: geraeteLeistung(this._hass, device, status),
-      })),
+      geraete: verbraucher(config).map(aufloesen),
+      speicher: acSpeicher(config).map(aufloesen),
     })
   }
 
@@ -359,7 +373,6 @@ export class SkytechPowerFlowCard extends LitElement {
     config: FlowConfig, status: FlowStatus | null, bilanz: Bilanz, schwelle: number,
   ): TemplateResult {
     const standard = config.standard ?? {}
-    const devices = config.devices ?? []
     const anzeige = config.anzeige ?? {}
     const hausKnoten = anzeige.haus_knoten_anzeigen !== false
 
@@ -369,7 +382,8 @@ export class SkytechPowerFlowCard extends LitElement {
         || standard.grid_export_entity),
       batterie: Boolean(standard.batterie),
       hausKnoten,
-      geraeteIds: devices.map((device) => device.id),
+      geraeteIds: verbraucher(config).map((device) => device.id),
+      speicherIds: acSpeicher(config).map((device) => device.id),
       rest: bilanz.uebrigesHaus > 0,
       breite: this._breite,
     })
@@ -421,6 +435,18 @@ export class SkytechPowerFlowCard extends LitElement {
     anlegen(netz, mitte, bilanz.netzInsHaus, '--spfc-grid', 'Netzbezug ins Haus')
     anlegen(netz, batterie, bilanz.netzInBatterie, '--spfc-grid', 'Netzbezug in die Batterie')
     anlegen(batterie, mitte, bilanz.batterieInsHaus, '--spfc-battery', 'Batterie ins Haus')
+
+    // Ein AC-Speicher bekommt EINE Kante zum Hausknoten, deren Richtung das
+    // Vorzeichen setzt. Woher er lädt, weiß die Karte nicht — das aufzuteilen
+    // wie beim Hausspeicher wäre erfunden.
+    for (const eintrag of bilanz.speicher) {
+      const knoten = findeKnoten(geometrie, eintrag.id)
+      if (eintrag.entladen > 0) {
+        anlegen(knoten, mitte, eintrag.entladen, '--spfc-battery', 'Speicher ins Haus')
+      } else {
+        anlegen(mitte, knoten, eintrag.laden, '--spfc-battery-in', 'Haus in den Speicher')
+      }
+    }
 
     bilanz.geraete.forEach((geraet, index) => {
       anlegen(mitte, findeKnoten(geometrie, geraet.id), geraet.fluss,
@@ -497,6 +523,11 @@ export class SkytechPowerFlowCard extends LitElement {
             werte: [{ wert: { wert: bilanz.uebrigesHaus, quelle: 'direkt' } }],
             schwelle,
           })
+        case 'speicher': {
+          const eintrag = bilanz.speicher.find((s) => s.id === knoten.id)
+          return this._zeichneSpeicher(
+            geometrie, knoten, geraete.get(knoten.id), eintrag, status, schwelle)
+        }
         default: {
           const device = geraete.get(knoten.id)
           const index = reihenfolge.get(knoten.id) ?? 0
@@ -572,6 +603,53 @@ export class SkytechPowerFlowCard extends LitElement {
     const rest = entities.length - zeilen.length
     if (rest > 0) zeilen.push(`und ${rest} weitere`)
     return zeilen
+  }
+
+  /** Ein AC-Speicher: wie der Hausspeicher gezeichnet, aber mit den
+      HEMS-Merkmalen eines Geräts.
+
+      Der Wert steht **immer positiv** — die Richtung trägt der Pfeil und die
+      Flusslinie. Eine negative Zahl am Knoten ließe offen, ob sie Einspeisung
+      oder Messfehler ist. */
+  private _zeichneSpeicher(
+    geometrie: Geometrie, knoten: Knoten, device: Device | undefined,
+    eintrag: SpeicherFluss | undefined, status: FlowStatus | null, schwelle: number,
+  ): SVGTemplateResult {
+    const soc = ladestand(this._hass, device?.soc_entity)
+    const statusEintrag = device ? status?.devices?.[device.id] : undefined
+    const aktiv = !status || statusEintrag?.runtime_active !== false
+    const grund = aktiv ? '' : (statusEintrag?.inactive_reasons ?? [])[0] ?? 'regelt gerade nicht mit'
+
+    const unbekannt = eintrag === undefined || eintrag.leistung.wert === null
+    const laedt = (eintrag?.laden ?? 0) > 0
+    const speist = (eintrag?.entladen ?? 0) > 0
+    const betrag = laedt ? eintrag!.laden : speist ? eintrag!.entladen : 0
+
+    const untertitel = [soc === null ? '' : prozent(soc), grund].filter(Boolean)
+
+    return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
+      symbol: device?.icon || SYMBOLE.battery!,
+      beschriftung: device?.label || device?.id || '',
+      farbe: laedt ? '--spfc-battery-in' : '--spfc-battery',
+      farbeRoh: device?.farbe || '',
+      werte: [{
+        wert: unbekannt
+          ? { wert: null, quelle: 'unbekannt' }
+          : { wert: betrag, quelle: eintrag!.leistung.quelle },
+        ...(laedt ? { richtung: 'runter' as const, farbe: '--spfc-battery-in' } : {}),
+        ...(speist ? { richtung: 'hoch' as const, farbe: '--spfc-battery' } : {}),
+      }],
+      ring: socRing(knoten, soc),
+      ringElement: akzentRing(knoten, aktiv),
+      untertitel,
+      zusatz: [
+        laedt ? 'lädt' : speist ? 'speist ins Haus' : '',
+        soc === null ? '' : `Ladestand ${prozent(soc)}`,
+        aktiv ? 'vom HEMS geregelt' : grund,
+      ].filter(Boolean).join(', '),
+      leitEntitaet: device?.soc_entity || device?.power_entity,
+      schwelle,
+    })
   }
 
   private _zeichneGeraet(
@@ -716,6 +794,13 @@ export class SkytechPowerFlowCard extends LitElement {
     if (bilanz.laden > 0) teile.push(`Batterie lädt mit ${leistungGesprochen(bilanz.laden, schwelle)}`)
     if (bilanz.entladen > 0) {
       teile.push(`Batterie entlädt mit ${leistungGesprochen(bilanz.entladen, schwelle)}`)
+    }
+    for (const speicher of bilanz.speicher) {
+      if (speicher.laden > 0) {
+        teile.push(`${speicher.id} lädt mit ${leistungGesprochen(speicher.laden, schwelle)}`)
+      } else if (speicher.entladen > 0) {
+        teile.push(`${speicher.id} speist ${leistungGesprochen(speicher.entladen, schwelle)}`)
+      }
     }
     return `Leistungsfluss: ${teile.join(', ')}.`
   }

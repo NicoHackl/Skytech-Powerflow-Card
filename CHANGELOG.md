@@ -11,6 +11,27 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+## [0.2.2] — 27.08.2026
+
+### Geändert
+
+- **AC-Speicher werden als Speicher gezeichnet, nicht als Verbraucher.** Ein Gerät der Klasse
+  `battery` stand bisher in der Gerätespalte zwischen Heizstab und Heizlüfter. Es steht jetzt
+  unter dem Hausspeicher, in derselben Spalte — mit Ladestandsring, der Prozentzahl darunter und
+  dem Akzentring, den jedes HEMS-Gerät trägt.
+- Der Wert am Speicherknoten steht **immer positiv**. Die Richtung trägt der Pfeil und die
+  Flusslinie: positiv heißt laden, negativ ins Haus speisen — dieselbe Lesart wie beim
+  Hausspeicher.
+
+### Behoben
+
+- **Ein entladender AC-Speicher zeigte eine negative Zahl und keine Flusslinie.** Geräteflüsse
+  wurden auf `max(0, Wert)` gedeckelt; ein Speicher, der das Haus speist, fiel damit auf `0`.
+- **Seine Entladung fehlte in der gerechneten Hausleistung.** Die Bilanz kannte nur den
+  Hausspeicher aus der Anlagenkonfiguration. Rechnet die Karte den Hausverbrauch selbst — also
+  immer dann, wenn keine Hausleistung konfiguriert ist —, war er um die Entladung zu niedrig.
+- Der Ladestand eines AC-Speichers wurde nicht angezeigt, obwohl das HEMS ihn mitliefert.
+
 ## [0.2.1] — 27.08.2026
 
 ### Behoben

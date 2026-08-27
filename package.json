@@ -1,6 +1,6 @@
 {
   "name": "skytech-power-flow-card",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Lovelace-Karte, die den Leistungsfluss im Haus zeichnet und ihre Konfiguration aus dem Skytech HEMS liest.",
   "type": "module",
   "license": "MIT",

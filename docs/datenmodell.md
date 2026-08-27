@@ -41,6 +41,27 @@ dieselbe Klasse kann verschiedene Varianten haben. Umsetzung in
 Ein `power_kind`, den die Karte nicht kennt, ergibt **unbekannt** — keinen Fehler. Der Vertrag
 erlaubt additive Erweiterungen.
 
+## Die Geräteklasse entscheidet, was gezeichnet wird
+
+`devices[].class` ist nicht nur Beschriftung. Ein Eintrag mit `class: "battery"` ist ein
+**AC-Speicher**: ein HEMS-Gerät, das das Haus auch **speisen** kann. Er wird deshalb nicht bei den
+Verbrauchern gezeichnet, sondern beim Hausspeicher — eine Zeile darunter, in derselben Spalte
+(D-010).
+
+| | Verbraucher (`controllable`, `binary`) | AC-Speicher (`battery`) |
+|---|---|---|
+| Ort | Spalte rechts vom Haus | unter dem Hausspeicher |
+| Vorzeichen | immer Verbrauch | positiv = laden, negativ = ins Haus speisen |
+| Anzeige | Wert wie gemessen | Betrag, **immer positiv**; die Richtung trägt der Pfeil |
+| Ladestand | – | Ring um den Knoten plus Prozentzeile aus `soc_entity` |
+| Hausbilanz | wird von der Hausleistung abgezogen | Laden senkt, Entladen erhöht sie |
+| Deckelung | gegen die Hausleistung | keine — er hängt nicht am Hausknoten |
+
+**Bewusste Vereinfachung:** Der Hausspeicher aus `standard.batterie` bekommt getrennte Kanten von
+Erzeugung und Netz, weil die Karte seinen Anteil aus der Gesamtbilanz herleiten kann. Ein
+AC-Speicher bekommt dagegen **eine** Kante zum Hausknoten. Woher er lädt, steht nirgends im
+Vertrag; es aufzuteilen hieße, es zu erfinden.
+
 ## Drei Zustände jedes Werts
 
 | Zustand | Wann | Darstellung |
