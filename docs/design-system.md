@@ -36,18 +36,32 @@ Eine verkleinerte Zeichnung nimmt die Schrift mit: bei 340 px Karte fiel sie so 
 
 | Element | normal | kompakt |
 |---|---|---|
-| Knotendurchmesser | 80 px | 60 px |
-| Symbol | 24 px | 20 px |
-| Wert im Knoten | 12 px | 11 px |
-| Beschriftung | 12 px | 11 px |
-| Untertitel | 11 px | 10 px |
-| Spaltenabstand | 104…150 px | 78…104 px |
-| Mindestbreite bei vier Spalten | 416 px | **318 px** |
+| Knotendurchmesser | 92 px | 64 px |
+| Symbol | 28 px | 21 px |
+| Symbol bei **zwei** Werten | 18 px | 14 px |
+| Wert im Knoten | 14 px | 12 px |
+| Beschriftung | 14 px | 12 px |
+| Untertitel | 12 px | 11 px |
+| Spaltenabstand | 112…160 px | 80…112 px |
+| Mindestbreite bei vier Spalten | 452 px | **328 px** |
 
 | Element | beide Maßstäbe |
 |---|---|
 | Strichbreite einer Kante | 1 px, `non-scaling-stroke` |
 | Eckenradius einer Kante | 22 px |
+| Beschriftung → Kantenkorridor | 8 px |
+
+Das Symbol schrumpft, sobald ein Knoten **zwei** Werte trägt. Zwei Zeilen drücken die untere
+Grundlinie sonst so tief in den Kreis, dass daneben keine Zahl mehr Platz hat — gemessen blieben
+dort im kompakten Maßstab 31 px Sehne, `231 W` mit Pfeil braucht 42. Das Symbol ist Schmuck, die
+Zahlen sind die Aussage.
+
+Reicht die Sehne trotzdem nicht, wird der **Wert** kleiner gesetzt, um höchstens zwei Punkte.
+Darunter nicht: eine Zahl, die den Kreis um ein Haar überschreitet, ist besser als eine, die
+niemand liest. Der verbleibende Überstand bleibt kleiner als der Freiraum bis zum Kantenkorridor.
+
+Der kleinste Spaltenabstand trägt immer `2 · Radius + 2 · 8 px`. Sonst griffe die Untergrenze
+„eine Beschriftung ist mindestens so breit wie ihr Knoten", und der Text liefe in den Korridor.
 
 Auf einer breiten Karte wird **zentriert, nicht gedehnt**. Reicht die Breite auch kompakt nicht,
 rücken die Spalten enger zusammen — bis zu einer Grenze, unter der sich die Kreise berühren würden.
@@ -89,10 +103,24 @@ Das Haus steht rechts der Erzeugung, die Quellen fließen von links und oben hin
 Vorbild. Die HEMS-Geräte hängen als Spalte rechts daneben und brechen ab sieben Einträgen in eine
 zweite Spalte um.
 
-Verbindungen laufen **rechtwinklig**: senkrechter Stummel aus dem Knoten, eine gerundete Ecke,
-waagerechter Lauf in den Zielknoten. Fluchten zwei Knoten, wird eine gerade Linie gezogen.
-Diagonalen gibt es nicht — sie kreuzten die Fläche zwischen den Spalten und machten die Karte
-unruhig.
+Verbindungen laufen **rechtwinklig** und verlassen den Knoten **seitlich**: waagerechter Stummel,
+gerundete Ecke, senkrechter Lauf im Korridor, gerundete Ecke, waagerechter Lauf in den Zielknoten
+(D-012). Fluchten zwei Knoten, wird eine gerade Linie gezogen. Diagonalen gibt es nicht — sie
+kreuzten die Fläche zwischen den Spalten und machten die Karte unruhig.
+
+Der senkrechte Lauf liegt eine **halbe Spalte** neben der Quelle, nie auf einer Knotenmitte: dort
+steht die Beschriftung, und eine dort abgehende Linie lief mitten durch sie hindurch. Überspringt
+eine Kante eine Spalte — Haus zur zweiten Gerätespalte —, bleibt sie trotzdem dicht an der Quelle,
+statt auf der übersprungenen Spaltenmitte zu landen.
+
+Alle Kanten, die denselben Knoten zur selben Seite verlassen, teilen sich damit **eine**
+Senkrechte. Der gemeinsame Ausgang des Hauses zu allen Überschussverbrauchern ergibt sich aus der
+Formel, nicht aus einer Sonderregel.
+
+Zwei Knoten in **derselben** Spalte werden weiterhin gerade verbunden. Diese Gerade kann durch den
+Text darunter laufen; dagegen trägt jeder Beschriftungstext eine Kontur in der Kartenfarbe, die
+unter die Füllung gemalt wird (`paint-order: stroke`). Die Linie bricht am Text ab, statt ihn
+durchzustreichen.
 
 ## Werte und Beschriftung
 
@@ -100,9 +128,11 @@ unruhig.
 - Netz und Speicher zeigen **beide** Richtungen untereinander. Eine einzelne vorzeichenbehaftete
   Zahl an einem Knoten ist nicht zu deuten: `−1,1 kW` kann Einspeisung oder ein Messfehler sein.
 - Die Beschriftung steht **außerhalb** — in der obersten Reihe über dem Kreis, sonst darunter.
-  Über dem Kreis deshalb, weil die Linie dort nach unten abgeht und die Beschriftung sonst
-  dazwischen läge.
-- Beschriftungen werden auf Knotenbreite gekürzt; der volle Text steht im `<title>`.
+  Über dem Kreis deshalb, damit der Textblock nicht über den oberen Kartenrand hinausragt.
+- Beschriftungen und Untertitel werden auf `Spaltenabstand − 16 px` gekürzt; der volle Text steht
+  im `<title>`. Das gilt auch für die Erzeugungs-Aufschlüsselung: sie durfte früher breiter
+  werden, weil in der obersten Reihe neben ihr nichts lag — seit die Kanten seitlich abgehen,
+  läuft dort der Korridor.
 - Der **Hausknoten** trägt keinen eigenen Rand, sondern einen nach Herkunft geteilten Ring:
   wie viel des Verbrauchs gerade aus Erzeugung, Speicher und Netz kommt.
 
@@ -180,7 +210,7 @@ zusätzlich Text, Form oder Symbol:
 |---|---|---|
 | Gerät wird geregelt | Akzentring | durchgezogene Linie, Vorlesetext „vom HEMS geregelt" |
 | Gerät regelt nicht mit | grauer Ring | **gestrichelte** Linie, Grund als Untertitel am Knoten |
-| Wert unbekannt | gedämpft | `—` statt einer Zahl, **keine** Flusslinie |
+| Wert unbekannt | — | `—` statt einer Zahl, **keine** Flusslinie |
 | Warnung am Kopf | Warnfarbe | Klartext im Abzeichen, z. B. „Geräteleistung übersteigt Hausleistung" |
 | Ladestand | Ring um den Knoten | Prozentzahl in der Beschriftung |
 
@@ -206,6 +236,19 @@ zusätzlich Text, Form oder Symbol:
 Mindestens **4,5:1** für Text, **3:1** für Linien und Ränder — in hellen wie in dunklen Themes.
 Weil die Farben aus dem Theme kommen, ist das nicht allein durch die Tokens sicherzustellen: die
 Sichtprüfung gehört zu jeder Änderung an der Zeichnung.
+
+Welches Token welcher Text trägt:
+
+| Text | Token | gemessen im dunklen Standardtheme |
+|---|---|---|
+| Beschriftung | `--spfc-text` | 13,0:1 |
+| Untertitel, unbekannter Wert | `--spfc-text-2` | 6,1:1 |
+| Wert | Quellfarbe (`currentColor`) | je Farbe zu prüfen |
+
+`--spfc-unknown` trägt **keinen Text mehr**. Gemessen an der laufenden Anlage kam es dort auf
+3,4:1 und blieb damit unter dem Mindestwert; dass ein Wert unbekannt ist, sagt ohnehin das
+Zeichen `—` selbst. Für die **ruhende Linie** bleibt das Token in Gebrauch — dort gilt der
+Mindestwert für Linien, nicht der für Text.
 
 ## Responsiv
 

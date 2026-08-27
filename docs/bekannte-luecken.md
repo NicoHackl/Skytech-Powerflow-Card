@@ -30,8 +30,18 @@ Dinge, die schon einmal Zeit gekostet haben:
   rechnet sie mit 480 px. In einer Umgebung ohne `ResizeObserver` bleibt es dabei — die Zeichnung
   ist dann nicht auf die Spalte abgestimmt, aber vollständig.
 - **Die Beschriftung wird nach einer mittleren Zeichenbreite gekürzt, nicht gemessen.** SVG-Text
-  kann nicht von selbst auslassen. Ein Name aus lauter schmalen Zeichen wird deshalb früher
-  gekürzt als nötig; der volle Text steht im `<title>`.
+  kann nicht von selbst auslassen. Gerechnet wird mit dem 0,53-fachen der Schriftgröße je Zeichen.
+  Gemessen liegt der tatsächliche Faktor im Mittel bei 0,52, im Einzelfall aber bei 0,66 — ein Name
+  aus lauter breiten Zeichen kann die zugestandene Breite also überschreiten. Der bislang breiteste
+  gemessene Text kam auf 107 px gegen 112 px Zugeständnis; Luft bis zum Kantenkorridor sind 8 px.
+  Wird die Kürzung einmal knapp, ist `getComputedTextLength()` der Ausweg — das kostet aber einen
+  zweiten Renderdurchlauf, deshalb bisher nicht gebaut. Der volle Text steht im `<title>`.
+- **Zwei Werte im Knoten passen im kompakten Maßstab nicht in jeder Größenordnung.** Zeigt ein
+  Knoten beide Richtungen **und** liegen die Werte über der Kilowattschwelle, ragt die untere Zahl
+  auf einer Handykarte um bis zu 3 px über den Kreisrand. Der Kreis gibt die Sehne dort schlicht
+  nicht her — auch ohne Symbol nicht. Der Überstand bleibt kleiner als der Freiraum bis zur
+  nächsten Linie, trifft also nichts. Kleiner gesetzt wird die Zahl nicht: unter zwei Punkte
+  Abzug wäre sie unlesbar.
 - **Der Zustand der Statusentität ist `pool_w`, nicht ihre Nutzlast.** Er kann gleich bleiben,
   während sich ein Gerät in den Attributen ändert. Wer die Änderungserkennung nur auf `state`
   aufbaut, verschläft solche Zyklen. Deshalb zählt für diese eine Entität zusätzlich

@@ -180,8 +180,21 @@ export const styles = css`
   /* Die Schriftgrößen kommen als Attribut aus dem Maßstab (normal/kompakt).
      Sie hier zu setzen würde das Attribut überstimmen — CSS schlägt eine
      Präsentationsangabe. */
+
+  /* Eine Kontur in der Kartenfarbe, UNTER die Füllung gemalt. Sie deckt den
+     einen Fall ab, den die seitliche Kantenführung nicht kennt: zwei Knoten in
+     derselben Spalte werden weiterhin gerade verbunden, und diese Gerade läuft
+     durch den Text darunter. */
+  .beschriftung,
+  .untertitel {
+    paint-order: stroke;
+    stroke: var(--spfc-surface);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+
   .beschriftung {
-    fill: var(--spfc-text-2);
+    fill: var(--spfc-text);
     text-anchor: middle;
   }
 
@@ -191,12 +204,15 @@ export const styles = css`
     font-weight: 500;
   }
 
+  /* Gemessen im dunklen Theme: --spfc-unknown ergab 3,4:1 gegen den
+     Kartengrund und blieb damit unter dem Mindestkontrast für Text. Dass der
+     Wert unbekannt ist, sagt ohnehin das Zeichen selbst. */
   .wert.unbekannt {
-    fill: var(--spfc-unknown);
+    fill: var(--spfc-text-2);
   }
 
   .untertitel {
-    fill: var(--spfc-unknown);
+    fill: var(--spfc-text-2);
     text-anchor: middle;
   }
 

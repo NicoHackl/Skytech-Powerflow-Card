@@ -11,6 +11,31 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+## [0.3.0] — 27.08.2026
+
+### Geändert
+
+- **Die Schrift ist größer.** Namen und Werte stehen jetzt in 14 statt 12 px, Untertitel in 12
+  statt 11 px; auf schmalen Karten in 12 statt 11 px. Die Knoten wachsen mit. Zwei Folgen: die
+  Karte braucht rund 450 px Breite, bevor sie auf die kompakte Darstellung wechselt, und lange
+  Gerätenamen werden ein Zeichen früher gekürzt — der volle Name steht weiterhin im Tooltip.
+- **Die Schrift hebt sich deutlicher vom Kartenhintergrund ab.** Namen sind so hell wie der
+  übrige Text des Dashboards, Ladestände und Hinweiszeilen so hell wie Nebentext. Zuvor lagen die
+  Nebenzeilen unter dem Mindestkontrast und waren im dunklen Modus kaum zu lesen.
+- **Die Verbindungslinien verlassen die Knoten seitlich statt oben und unten.** Alle Linien, die
+  ein Knoten zur selben Seite verlässt, laufen gebündelt in einer Senkrechten. Das Haus hat damit
+  einen gemeinsamen Ausgang nach rechts zu allen Überschussverbrauchern.
+
+### Behoben
+
+- **Linien laufen nicht mehr durch Beschriftungen.** Die Linie eines AC-Speichers strich zuvor
+  quer durch Namen und Ladestand des Speichers darüber; dasselbe traf Haus und Netz. Bleibt eine
+  Linie unvermeidbar hinter einem Text — zwei Knoten in derselben Spalte —, bricht sie am Text ab,
+  statt ihn durchzustreichen.
+- **Werte bleiben im Knoten.** Zeigte ein Knoten beide Richtungen zugleich, ragte die untere Zahl
+  über den Kreisrand hinaus. Das Symbol weicht jetzt, und reicht das nicht, wird die Zahl bis zu
+  zwei Punkte kleiner gesetzt.
+
 ## [0.2.3] — 27.08.2026
 
 ### Hinzugefügt
