@@ -1,10 +1,13 @@
-/* Geometrie: Knotenpositionen und Kantenpfade.
+/* Geometrie: Maßstab, Knotenpositionen und Kantenpfade.
 
    Gerechnet wird in **Bildschirmpunkten**, nicht in einem skalierten
-   Koordinatensystem: die viewBox trägt genau die gemessene Kartenbreite. Nur
-   so bleibt 12-px-Text auch 12 px groß. Die Vorgängerfassung skalierte die
-   ganze Zeichnung auf die Kartenbreite und schrumpfte die Beschriftung dabei
-   auf 11,3 px.
+   Koordinatensystem: die viewBox trägt genau die gemessene Kartenbreite.
+
+   Damit das auch auf einer schmalen Karte trägt, gibt es zwei Maßstäbe. Passt
+   der normale nicht in die gemessene Breite, gilt der kompakte — die Karte
+   wird also kleiner gezeichnet statt als Ganzes herunterskaliert. Wird
+   skaliert, schrumpft die Schrift mit: bei 340 px Karte fiel sie so von 12 auf
+   8,5 px, und Symbol, Wert und Beschriftung liefen ineinander.
 
    Reine Rechnerei ohne DOM — die Testbarkeit hängt daran. */
 
@@ -23,10 +26,27 @@ export interface Knoten {
   beschriftung: BeschriftungsSeite
 }
 
+/** Alle Maße einer Darstellungsgröße. Nichts davon skaliert mit der
+    Kartenbreite — gewechselt wird der ganze Satz. */
+export interface Massstab {
+  name: 'normal' | 'kompakt'
+  r: number
+  symbol: number
+  /** Wert im Knoten und Beschriftung darunter. */
+  schrift: number
+  untertitel: number
+  spalteMin: number
+  spalteMax: number
+}
+
 export interface Geometrie {
   breite: number
   hoehe: number
   knoten: Knoten[]
+  mass: Massstab
+  /** Tatsächlicher Abstand der Spaltenmitten. Grundlage dafür, wie breit eine
+      Beschriftung werden darf, ohne die Nachbarspalte zu berühren. */
+  spalte: number
 }
 
 export interface LayoutEingabe {
@@ -36,48 +56,123 @@ export interface LayoutEingabe {
   hausKnoten: boolean
   geraeteIds: string[]
   rest: boolean
-  /** Gemessene Breite der Karte. Reicht sie nicht, rücken die Spalten enger. */
+  /** Gemessene Breite der Karte. Sie entscheidet über den Maßstab. */
   breite: number
 }
 
-/* Feste Maße wie im Vorbild — nichts davon skaliert mit der Kartenbreite. */
-export const KNOTEN_R = 40
-export const SYMBOL_GROESSE = 24
-export const SCHRIFT = 12
-/** Höhe des Beschriftungsblocks über beziehungsweise unter dem Kreis. */
-export const BESCHRIFTUNG_H = 18
+export const NORMAL: Massstab = {
+  name: 'normal', r: 40, symbol: 24, schrift: 12, untertitel: 11,
+  spalteMin: 104, spalteMax: 150,
+}
+
+export const KOMPAKT: Massstab = {
+  name: 'kompakt', r: 30, symbol: 20, schrift: 11, untertitel: 10,
+  spalteMin: 78, spalteMax: 104,
+}
+
 export const ECKE = 22
 const RAND = 12
-const SPALTE_MAX = 150
-const SPALTE_MIN = 104
-/* Zeilenhöhe = Kreis + Beschriftung + Untertitel + Luft. Sie wird aus dem
-   tatsächlichen Textblock gerechnet, nicht geraten: die Vorgängerfassung setzte
-   sie fest auf 92 und schob damit jede Wertzeile in den nächsten Knoten. */
-const UNTERTITEL_H = 14
-const ZEILE = KNOTEN_R * 2 + BESCHRIFTUNG_H + UNTERTITEL_H + 12
+
+/** Mindestabstand zwischen Symbol und Wert **im** Knoten. Darunter lesen sich
+    die beiden als ein Klumpen — gemessen waren es 1,4 px. */
+export const LUFT_INNEN = 6
+
+/** Mindestabstand zwischen Kreisrand und Beschriftung darunter. */
+export const LUFT_AUSSEN = 6
+
+/** Zeilenabstand als Vielfaches der Schriftgröße. Bei knapp über 1 berühren
+    sich Unterlängen und Oberlängen zweier Zeilen — gemessen überlappten
+    Beschriftung und Untertitel bei einem Abstand von 12 px auf 11-px-Schrift. */
+const ZEILE_FAKTOR = 1.35
+
+/** So viele Untertitelzeilen hält jede Zeile frei. Zwei, weil die
+    Erzeugungs-Aufschlüsselung so viele braucht. */
+const UNTERTITEL_ZEILEN = 2
 
 /** Ab so vielen Geräten bricht die Geräteliste in eine zweite Spalte um. */
 const ZWEI_SPALTEN_AB = 7
+
+/* --------------------------------------------------------------------------
+   Knoteninhalt
+   -------------------------------------------------------------------------- */
+
+export interface KnotenInhalt {
+  /** Mitte des Symbols, relativ zur Knotenmitte. */
+  symbolY: number
+  /** Grundlinien der Werte, relativ zur Knotenmitte. */
+  werteY: number[]
+  /** Grundlinie der Beschriftung, relativ zum Kreisrand. */
+  beschriftungY: number
+  /** Zeilenabstand der Untertitel. */
+  untertitelSchritt: number
+  /** Gesamthöhe des Textblocks außerhalb des Kreises. */
+  textBlock: number
+}
+
+/** Wo Symbol, Werte und Beschriftung eines Knotens sitzen.
+
+    Der Inhalt wird auf der Knotenmitte **zentriert**, statt mit festen
+    Versätzen gesetzt. Nur so stimmen die Abstände in beiden Maßstäben und bei
+    einem wie bei zwei Werten je Knoten. Die Vorgängerfassung streute die
+    Versätze als Zahlen durch den Render; keine davon kannte die Schriftgröße,
+    und keine war geprüft. */
+export function knotenInhalt(mass: Massstab, anzahlWerte: number): KnotenInhalt {
+  const werte = Math.max(1, anzahlWerte)
+  const zeilenAbstand = mass.schrift + 3
+  const innenHoehe = mass.symbol + LUFT_INNEN + mass.schrift + (werte - 1) * zeilenAbstand
+  const oben = -innenHoehe / 2
+
+  const werteY: number[] = []
+  for (let index = 0; index < werte; index += 1) {
+    // Grundlinie: Oberkante des Blocks + Symbol + Luft + eine volle Zeile.
+    werteY.push(oben + mass.symbol + LUFT_INNEN + mass.schrift + index * zeilenAbstand)
+  }
+
+  // Der Schritt richtet sich nach der GRÖSSEREN der beiden Schriften: er
+  // trennt zuerst die Beschriftung vom ersten Untertitel.
+  const untertitelSchritt = Math.round(
+    Math.max(mass.schrift, mass.untertitel) * ZEILE_FAKTOR)
+  const beschriftungY = LUFT_AUSSEN + mass.schrift
+
+  return {
+    symbolY: oben + mass.symbol / 2,
+    werteY,
+    beschriftungY,
+    untertitelSchritt,
+    textBlock: beschriftungY + UNTERTITEL_ZEILEN * untertitelSchritt,
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Anordnung
+   -------------------------------------------------------------------------- */
 
 export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
   const rechts = [...eingabe.geraeteIds, ...(eingabe.rest ? ['rest'] : [])]
   const geraeteSpalten = rechts.length >= ZWEI_SPALTEN_AB ? 2 : 1
   const proSpalte = Math.ceil(rechts.length / geraeteSpalten) || 0
+  const spaltenAnzahl = 3 + (rechts.length ? geraeteSpalten : 0)
+
+  // Passt der normale Maßstab nicht, wird der kompakte gezeichnet — nicht der
+  // normale verkleinert. Eine verkleinerte Zeichnung nimmt die Schrift mit.
+  const mass = mindestBreite(NORMAL, spaltenAnzahl) <= eingabe.breite ? NORMAL : KOMPAKT
 
   /* Der Stamm trägt Erzeugung, Netz, Haus und Speicher. Fehlt einer davon,
      rücken die übrigen zusammen — es entsteht kein Loch. */
   const stammZeilen = (eingabe.pv ? 1 : 0) + 1 + (eingabe.batterie ? 1 : 0)
   const zeilen = Math.max(stammZeilen, proSpalte, 1)
 
-  const spaltenAnzahl = 3 + (rechts.length ? geraeteSpalten : 0)
-  const spalte = spaltenBreite(eingabe.breite, spaltenAnzahl)
+  const spalte = spaltenBreite(mass, eingabe.breite, spaltenAnzahl)
+  const inhalt = knotenInhalt(mass, 1)
+  const zeilenHoehe = mass.r * 2 + inhalt.textBlock + 12
 
-  const x = (index: number) => RAND + KNOTEN_R + index * spalte
-  const breite = Math.max(eingabe.breite, x(spaltenAnzahl - 1) + KNOTEN_R + RAND)
-  const versatzX = Math.max(0, (breite - (x(spaltenAnzahl - 1) + KNOTEN_R + RAND)) / 2)
+  const x = (index: number) => RAND + mass.r + index * spalte
+  const gebraucht = x(spaltenAnzahl - 1) + mass.r + RAND
+  const breite = Math.max(eingabe.breite, gebraucht)
+  const versatzX = Math.max(0, (breite - gebraucht) / 2)
 
-  const oben = RAND + BESCHRIFTUNG_H
-  const y = (zeile: number) => oben + zeile * ZEILE + KNOTEN_R
+  const oben = RAND + inhalt.textBlock
+  const y = (zeile: number) => oben + zeile * zeilenHoehe + mass.r
 
   const knoten: Knoten[] = []
   const setze = (id: string, art: KnotenArt, spalteIndex: number, zeile: number) => {
@@ -85,7 +180,7 @@ export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
       id, art,
       x: x(spalteIndex) + versatzX,
       y: y(zeile),
-      r: KNOTEN_R,
+      r: mass.r,
       beschriftung: zeile === 0 ? 'oben' : 'unten',
     })
   }
@@ -109,17 +204,23 @@ export function baueGeometrie(eingabe: LayoutEingabe): Geometrie {
       geraeteVersatz + (index % proSpalte))
   })
 
-  const hoehe = oben + zeilen * ZEILE + BESCHRIFTUNG_H + RAND
-  return { breite, hoehe, knoten }
+  const hoehe = oben + zeilen * zeilenHoehe + inhalt.textBlock + RAND
+  return { breite, hoehe, knoten, mass, spalte }
+}
+
+/** Wie breit die Karte mindestens sein muss, damit dieser Maßstab ohne
+    Verkleinerung trägt. */
+export function mindestBreite(mass: Massstab, spalten: number): number {
+  return 2 * RAND + 2 * mass.r + Math.max(0, spalten - 1) * mass.spalteMin
 }
 
 /** Passt der Spaltenabstand nicht in die Karte, wird er enger — bis zu einer
     Grenze, unter der sich die Kreise berühren würden. */
-function spaltenBreite(kartenBreite: number, spalten: number): number {
-  if (spalten <= 1) return SPALTE_MAX
-  const verfuegbar = kartenBreite - 2 * RAND - 2 * KNOTEN_R
+function spaltenBreite(mass: Massstab, kartenBreite: number, spalten: number): number {
+  if (spalten <= 1) return mass.spalteMax
+  const verfuegbar = kartenBreite - 2 * RAND - 2 * mass.r
   const passend = verfuegbar / (spalten - 1)
-  return Math.max(SPALTE_MIN, Math.min(SPALTE_MAX, passend))
+  return Math.max(mass.spalteMin, Math.min(mass.spalteMax, passend))
 }
 
 export function findeKnoten(geometrie: Geometrie, id: string): Knoten | undefined {

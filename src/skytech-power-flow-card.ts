@@ -14,13 +14,17 @@ import {
 } from './power'
 import { berechneBilanz, type Bilanz, type Hinweis } from './balance'
 import {
-  baueGeometrie, findeKnoten, BESCHRIFTUNG_H, SYMBOL_GROESSE,
-  type Geometrie, type Knoten,
+  baueGeometrie, findeKnoten, knotenInhalt,
+  type Geometrie, type KnotenInhalt, type Massstab, type Knoten,
 } from './layout'
 import {
   akzentRing, hausRing, richtungsPfeil, socRing, zeichneKante,
   type HausAnteil, type Kante,
 } from './flow-svg'
+
+/** Luft zwischen Kreisrand und einer Beschriftung, die ÜBER dem Knoten steht.
+    Etwas knapper als unten, weil dort keine zweite Zeile folgt. */
+const LUFT_AUSSEN_OBEN = 8
 import { leistung, leistungGesprochen, prozent, uhrzeit, UNBEKANNT_TEXT } from './format'
 import './editor'
 
@@ -48,9 +52,11 @@ const STANDARD_BREITE = 480
     genauso oft, und die Zahlen flackern unlesbar. */
 const RENDER_FENSTER_MS = 1000
 
-/** Mittlere Zeichenbreite bei 12 px. Grundlage für das Kürzen der
-    Beschriftung — SVG-Text kann nicht von selbst auslassen. */
-const ZEICHEN_BREITE = 6.4
+/** Mittlere Zeichenbreite je Schriftgröße. Grundlage für das Kürzen der
+    Beschriftung — SVG-Text kann nicht von selbst auslassen. Fest auf 12 px zu
+    kalibrieren ginge im kompakten Maßstab daneben. */
+const ZEICHEN_FAKTOR = 0.53
+const zeichenBreite = (schrift: number) => schrift * ZEICHEN_FAKTOR
 
 /** So viele Erzeugungszeilen passen unter den Knoten. */
 const PV_DETAIL_MAX = 2
@@ -438,7 +444,7 @@ export class SkytechPowerFlowCard extends LitElement {
     return geometrie.knoten.map((knoten) => {
       switch (knoten.art) {
         case 'pv':
-          return this._zeichneKnoten(knoten, {
+          return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
             symbol: SYMBOLE.pv!,
             beschriftung: standard.pv_label || 'Photovoltaik',
             farbe: '--spfc-pv',
@@ -449,7 +455,7 @@ export class SkytechPowerFlowCard extends LitElement {
             schwelle,
           })
         case 'netz':
-          return this._zeichneKnoten(knoten, {
+          return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
             symbol: SYMBOLE.netz!,
             beschriftung: standard.grid_label || 'Netz',
             farbe: bilanz.netzeinspeisung > bilanz.netzbezug ? '--spfc-export' : '--spfc-grid',
@@ -459,7 +465,7 @@ export class SkytechPowerFlowCard extends LitElement {
           })
         case 'haus':
         case 'verteiler':
-          return this._zeichneKnoten(knoten, {
+          return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
             symbol: knoten.art === 'haus' ? SYMBOLE.haus! : SYMBOLE.verteiler!,
             beschriftung: standard.house_label || 'Haus',
             farbe: '--spfc-house',
@@ -471,7 +477,7 @@ export class SkytechPowerFlowCard extends LitElement {
           })
         case 'batterie': {
           const soc = ladestand(this._hass, standard.batterie?.soc_entity)
-          return this._zeichneKnoten(knoten, {
+          return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
             symbol: SYMBOLE.batterie!,
             beschriftung: standard.batterie?.label || 'Batterie',
             farbe: bilanz.laden > 0 ? '--spfc-battery-in' : '--spfc-battery',
@@ -484,7 +490,7 @@ export class SkytechPowerFlowCard extends LitElement {
           })
         }
         case 'rest':
-          return this._zeichneKnoten(knoten, {
+          return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
             symbol: SYMBOLE.rest!,
             beschriftung: 'Übriges Haus',
             farbe: '--spfc-house',
@@ -495,7 +501,7 @@ export class SkytechPowerFlowCard extends LitElement {
           const device = geraete.get(knoten.id)
           const index = reihenfolge.get(knoten.id) ?? 0
           return this._zeichneGeraet(
-            knoten, device, fluesse.get(knoten.id)?.leistung, status, index, schwelle)
+            geometrie, knoten, device, fluesse.get(knoten.id)?.leistung, status, index, schwelle)
         }
       }
     })
@@ -569,8 +575,9 @@ export class SkytechPowerFlowCard extends LitElement {
   }
 
   private _zeichneGeraet(
-    knoten: Knoten, device: Device | undefined, wert: Aufloesung | undefined,
-    status: FlowStatus | null, index: number, schwelle: number,
+    geometrie: Geometrie, knoten: Knoten, device: Device | undefined,
+    wert: Aufloesung | undefined, status: FlowStatus | null,
+    index: number, schwelle: number,
   ): SVGTemplateResult {
     const eintrag = device ? status?.devices?.[device.id] : undefined
     // Fehlt die Statusentität, gilt jedes Gerät aus devices[] als geregelt —
@@ -578,7 +585,7 @@ export class SkytechPowerFlowCard extends LitElement {
     const aktiv = !status || eintrag?.runtime_active !== false
     const grund = aktiv ? '' : (eintrag?.inactive_reasons ?? [])[0] ?? 'regelt gerade nicht mit'
 
-    return this._zeichneKnoten(knoten, {
+    return this._zeichneKnoten(knoten, geometrie.mass, geometrie.spalte, {
       symbol: device?.icon || SYMBOLE[device?.class ?? ''] || SYMBOLE.controllable!,
       beschriftung: device?.label || device?.id || '',
       farbe: GERAETE_FARBEN[index % GERAETE_FARBEN.length]!,
@@ -592,22 +599,31 @@ export class SkytechPowerFlowCard extends LitElement {
     })
   }
 
-  private _zeichneKnoten(knoten: Knoten, teil: KnotenTeil): SVGTemplateResult {
+  private _zeichneKnoten(
+    knoten: Knoten, mass: Massstab, spalte: number, teil: KnotenTeil,
+  ): SVGTemplateResult {
     const klickbar = Boolean(teil.leitEntitaet)
     const farbe = teil.farbeRoh || `var(${teil.farbe})`
-    const symbolY = knoten.y - (teil.werte.length > 1 ? 18 : 13)
+    const inhalt = knotenInhalt(mass, teil.werte.length)
+
+    const symbolY = knoten.y + inhalt.symbolY
     const beschriftungY = knoten.beschriftung === 'oben'
-      ? knoten.y - knoten.r - 8
-      : knoten.y + knoten.r + BESCHRIFTUNG_H - 4
+      ? knoten.y - knoten.r - LUFT_AUSSEN_OBEN
+      : knoten.y + knoten.r + inhalt.beschriftungY
     const untertitelY = knoten.beschriftung === 'oben'
-      ? knoten.y + knoten.r + 14
-      : beschriftungY + 14
+      ? knoten.y + knoten.r + inhalt.beschriftungY
+      : beschriftungY + inhalt.untertitelSchritt
     const untertitel = typeof teil.untertitel === 'string'
       ? (teil.untertitel ? [teil.untertitel] : [])
       : (teil.untertitel ?? [])
-    // Die Aufschlüsselung darf über den Knoten hinausragen: sie steht in der
-    // obersten Reihe, wo neben ihr nichts liegt.
-    const untertitelBreite = teil.untertitelBreit ? knoten.r * 2 + 90 : knoten.r * 2 + 40
+
+    // Die Beschriftung darf die Nachbarspalte nicht berühren. Frühere Fassungen
+    // rechneten mit dem Knotendurchmesser statt mit dem Spaltenabstand — bei
+    // engen Spalten liefen die Namen ineinander.
+    const spaltenBreite = Math.max(mass.r * 2, spalte - 8)
+    // Die Aufschlüsselung darf breiter sein: sie steht in der obersten Reihe,
+    // wo neben ihr nichts liegt.
+    const untertitelBreite = teil.untertitelBreit ? spalte * 1.6 : spaltenBreite
 
     const beschreibung = [
       teil.beschriftung,
@@ -633,21 +649,28 @@ export class SkytechPowerFlowCard extends LitElement {
         ${teil.ring ?? null}
         ${teil.ringElement ?? null}
         <foreignObject
-          x=${knoten.x - SYMBOL_GROESSE / 2} y=${symbolY - SYMBOL_GROESSE / 2}
-          width=${SYMBOL_GROESSE} height=${SYMBOL_GROESSE}
+          x=${knoten.x - mass.symbol / 2} y=${symbolY - mass.symbol / 2}
+          width=${mass.symbol} height=${mass.symbol}
           aria-hidden="true"
         >
-          <ha-icon class="symbol" icon=${teil.symbol}></ha-icon>
+          <ha-icon
+            class="symbol" icon=${teil.symbol}
+            style=${`--mdc-icon-size: ${mass.symbol}px`}
+          ></ha-icon>
         </foreignObject>
         ${teil.werte.map((eintrag, index) => this._zeichneWert(
-          knoten, eintrag, index, teil.werte.length, teil.schwelle))}
-        <text class="beschriftung" x=${knoten.x} y=${beschriftungY}>
-          ${kuerze(teil.beschriftung, knoten.r * 2 + 20)}
+          knoten, eintrag, index, teil.schwelle, mass, inhalt))}
+        <text class="beschriftung" x=${knoten.x} y=${beschriftungY} font-size=${mass.schrift}>
+          ${kuerze(teil.beschriftung, spaltenBreite, mass.schrift)}
           <title>${teil.beschriftung}</title>
         </text>
         ${untertitel.map((zeile, index) => svg`
-          <text class="untertitel" x=${knoten.x} y=${untertitelY + index * 13}>
-            ${kuerze(zeile, untertitelBreite)}
+          <text
+            class="untertitel" x=${knoten.x}
+            y=${untertitelY + index * inhalt.untertitelSchritt}
+            font-size=${mass.untertitel}
+          >
+            ${kuerze(zeile, untertitelBreite, mass.untertitel)}
             <title>${zeile}</title>
           </text>
         `)}
@@ -657,21 +680,23 @@ export class SkytechPowerFlowCard extends LitElement {
 
   /** Ein Wert **im** Kreis, mit Richtungspfeil davor. */
   private _zeichneWert(
-    knoten: Knoten, eintrag: KnotenWert, index: number, anzahl: number, schwelle: number,
+    knoten: Knoten, eintrag: KnotenWert, index: number, schwelle: number,
+    mass: Massstab, inhalt: KnotenInhalt,
   ): SVGTemplateResult {
-    const y = knoten.y + (anzahl > 1 ? 4 + index * 15 : 12)
+    const y = knoten.y + (inhalt.werteY[index] ?? inhalt.werteY[0] ?? 0)
     const text = leistung(eintrag.wert.wert, schwelle)
     const unbekannt = eintrag.wert.wert === null
-    const breite = text.length * ZEICHEN_BREITE
+    const breite = text.length * zeichenBreite(mass.schrift)
     const pfeilX = knoten.x - breite / 2 - 6
 
     return svg`
       <g style=${eintrag.farbe ? `color: var(${eintrag.farbe})` : nothing}>
         ${eintrag.richtung && !unbekannt
-          ? richtungsPfeil(pfeilX, y - 4, eintrag.richtung) : null}
+          ? richtungsPfeil(pfeilX, y - mass.schrift / 3, eintrag.richtung) : null}
         <text
           class=${`wert${unbekannt ? ' unbekannt' : ''}`}
           x=${eintrag.richtung && !unbekannt ? knoten.x + 4 : knoten.x} y=${y}
+          font-size=${mass.schrift}
         >${text}</text>
       </g>
     `
@@ -740,8 +765,8 @@ interface KnotenTeil {
 
 /** SVG-Text kann nicht von selbst auslassen. Gekürzt wird deshalb hier, nach
     einer mittleren Zeichenbreite — der volle Text steht im `<title>`. */
-export function kuerze(text: string, maxBreite: number): string {
-  const zeichen = Math.floor(maxBreite / ZEICHEN_BREITE)
+export function kuerze(text: string, maxBreite: number, schrift: number): string {
+  const zeichen = Math.floor(maxBreite / zeichenBreite(schrift))
   if (text.length <= zeichen) return text
   return `${text.slice(0, Math.max(1, zeichen - 1)).trimEnd()}…`
 }

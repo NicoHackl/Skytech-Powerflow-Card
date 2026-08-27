@@ -36,8 +36,11 @@ export const styles = css`
     display: block;
   }
 
+  /* Seitlich keine Polsterung: die Zeichnung bringt ihren eigenen Rand mit,
+     und eine zweite hier abgezogene Breite hätte die Karte doch wieder
+     verkleinert — der Maßstab rechnet mit der gemessenen Kartenbreite. */
   ha-card {
-    padding: 8px 8px 12px;
+    padding: 8px 0 12px;
     overflow: hidden;
   }
 
@@ -174,16 +177,17 @@ export const styles = css`
 
   /* ---------- Text ---------- */
 
+  /* Die Schriftgrößen kommen als Attribut aus dem Maßstab (normal/kompakt).
+     Sie hier zu setzen würde das Attribut überstimmen — CSS schlägt eine
+     Präsentationsangabe. */
   .beschriftung {
     fill: var(--spfc-text-2);
     text-anchor: middle;
-    font-size: 12px;
   }
 
   .wert {
     fill: currentColor;
     text-anchor: middle;
-    font-size: 12px;
     font-weight: 500;
   }
 
@@ -194,7 +198,6 @@ export const styles = css`
   .untertitel {
     fill: var(--spfc-unknown);
     text-anchor: middle;
-    font-size: 11px;
   }
 
   .pfeil {
@@ -203,7 +206,6 @@ export const styles = css`
 
   .symbol {
     color: currentColor;
-    --mdc-icon-size: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
