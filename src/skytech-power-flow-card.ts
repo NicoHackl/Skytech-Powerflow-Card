@@ -16,7 +16,8 @@ import {
   berechneBilanz, type Bilanz, type Hinweis, type SpeicherFluss,
 } from './balance'
 import {
-  baueGeometrie, findeKnoten, knotenInhalt,
+  baueGeometrie, beschriftungsBreite, findeKnoten, knotenInhalt, kuerze, wertSchrift,
+  zeichenBreite, PFEIL_PLATZ,
   type Geometrie, type KnotenInhalt, type Massstab, type Knoten,
 } from './layout'
 import {
@@ -53,12 +54,6 @@ const STANDARD_BREITE = 480
     mehrmals pro Sekunde; ohne dieses Fenster rechnet und zeichnet die Karte
     genauso oft, und die Zahlen flackern unlesbar. */
 const RENDER_FENSTER_MS = 1000
-
-/** Mittlere Zeichenbreite je Schriftgröße. Grundlage für das Kürzen der
-    Beschriftung — SVG-Text kann nicht von selbst auslassen. Fest auf 12 px zu
-    kalibrieren ginge im kompakten Maßstab daneben. */
-const ZEICHEN_FAKTOR = 0.53
-const zeichenBreite = (schrift: number) => schrift * ZEICHEN_FAKTOR
 
 /** So viele Erzeugungszeilen passen unter den Knoten. */
 const PV_DETAIL_MAX = 2
@@ -426,7 +421,10 @@ export class SkytechPowerFlowCard extends LitElement {
       wert: number, farbe: string, was: string,
     ) => {
       if (!von || !nach) return
-      kanten.push({ von, nach, wert, farbe, beschreibung: `${was} ${leistung(wert, schwelle)}` })
+      kanten.push({
+        von, nach, wert, farbe, spalte: geometrie.spalte,
+        beschreibung: `${was} ${leistung(wert, schwelle)}`,
+      })
     }
 
     anlegen(pv, mitte, bilanz.pvInsHaus, '--spfc-pv', 'Erzeugung ins Haus')
@@ -476,7 +474,6 @@ export class SkytechPowerFlowCard extends LitElement {
             farbe: '--spfc-pv',
             werte: [{ wert: bilanz.pv, richtung: 'runter' }],
             untertitel: this._pvAufschluesselung(standard, schwelle),
-            untertitelBreit: true,
             leitEntitaet: (standard.pv_power_entities ?? [])[0],
             ziel: standard.pv_navigation,
             schwelle,
@@ -593,7 +590,12 @@ export class SkytechPowerFlowCard extends LitElement {
 
       Je Zeile eine eigene Textzeile: aneinandergereiht wären sie länger als
       der Knoten breit ist und würden abgeschnitten. Mehr als drei passen nicht
-      in den Zeilenabstand — der Rest wird gezählt statt gezeigt. */
+      in den Zeilenabstand — der Rest wird gezählt statt gezeigt.
+
+      Die Zeilen halten dieselbe Breite ein wie jede andere Beschriftung. Früher
+      durften sie 1,6 Spalten belegen, weil in der obersten Reihe neben ihnen
+      nichts lag — seit die Kanten seitlich abgehen, läuft dort der senkrechte
+      Korridor. */
   private _pvAufschluesselung(standard: FlowConfig['standard'], schwelle: number): string[] {
     const entities = standard?.pv_detail_entities ?? []
     if (entities.length === 0) return []
@@ -703,13 +705,11 @@ export class SkytechPowerFlowCard extends LitElement {
       ? (teil.untertitel ? [teil.untertitel] : [])
       : (teil.untertitel ?? [])
 
-    // Die Beschriftung darf die Nachbarspalte nicht berühren. Frühere Fassungen
-    // rechneten mit dem Knotendurchmesser statt mit dem Spaltenabstand — bei
-    // engen Spalten liefen die Namen ineinander.
-    const spaltenBreite = Math.max(mass.r * 2, spalte - 8)
-    // Die Aufschlüsselung darf breiter sein: sie steht in der obersten Reihe,
-    // wo neben ihr nichts liegt.
-    const untertitelBreite = teil.untertitelBreit ? spalte * 1.6 : spaltenBreite
+    // Die Beschriftung darf weder die Nachbarspalte noch den senkrechten
+    // Korridor der Kanten berühren. Frühere Fassungen rechneten mit dem
+    // Knotendurchmesser statt mit dem Spaltenabstand — bei engen Spalten liefen
+    // die Namen ineinander.
+    const spaltenBreite = beschriftungsBreite(mass, spalte)
 
     const beschreibung = [
       teil.beschriftung,
@@ -719,6 +719,16 @@ export class SkytechPowerFlowCard extends LitElement {
       // Eine Vorlesestimme muss wissen, dass der Klick die Seite wechselt.
       ziel ? 'öffnet eine andere Seite' : '',
     ].filter(Boolean).join(', ')
+
+    // Ein Grad für ALLE Wertzeilen eines Knotens: unterschiedlich große Zahlen
+    // übereinander lesen sich als Fehler, nicht als Anpassung.
+    const wertGrad = teil.werte.reduce((grad, eintrag, index) => Math.min(grad, wertSchrift(
+      leistung(eintrag.wert.wert, teil.schwelle).length,
+      Boolean(eintrag.richtung) && eintrag.wert.wert !== null,
+      knoten.r,
+      inhalt.werteY[index] ?? 0,
+      mass.schrift,
+    )), mass.schrift)
 
     return svg`
       <g
@@ -737,17 +747,17 @@ export class SkytechPowerFlowCard extends LitElement {
         ${teil.ring ?? null}
         ${teil.ringElement ?? null}
         <foreignObject
-          x=${knoten.x - mass.symbol / 2} y=${symbolY - mass.symbol / 2}
-          width=${mass.symbol} height=${mass.symbol}
+          x=${knoten.x - inhalt.symbol / 2} y=${symbolY - inhalt.symbol / 2}
+          width=${inhalt.symbol} height=${inhalt.symbol}
           aria-hidden="true"
         >
           <ha-icon
             class="symbol" icon=${teil.symbol}
-            style=${`--mdc-icon-size: ${mass.symbol}px`}
+            style=${`--mdc-icon-size: ${inhalt.symbol}px`}
           ></ha-icon>
         </foreignObject>
         ${teil.werte.map((eintrag, index) => this._zeichneWert(
-          knoten, eintrag, index, teil.schwelle, mass, inhalt))}
+          knoten, eintrag, index, teil.schwelle, wertGrad, inhalt))}
         <text class="beschriftung" x=${knoten.x} y=${beschriftungY} font-size=${mass.schrift}>
           ${kuerze(teil.beschriftung, spaltenBreite, mass.schrift)}
           <title>${teil.beschriftung}</title>
@@ -758,7 +768,7 @@ export class SkytechPowerFlowCard extends LitElement {
             y=${untertitelY + index * inhalt.untertitelSchritt}
             font-size=${mass.untertitel}
           >
-            ${kuerze(zeile, untertitelBreite, mass.untertitel)}
+            ${kuerze(zeile, spaltenBreite, mass.untertitel)}
             <title>${zeile}</title>
           </text>
         `)}
@@ -766,25 +776,32 @@ export class SkytechPowerFlowCard extends LitElement {
     `
   }
 
-  /** Ein Wert **im** Kreis, mit Richtungspfeil davor. */
+  /** Ein Wert **im** Kreis, mit Richtungspfeil davor.
+
+      Pfeil und Zahl bilden **einen** Block, der auf der Knotenmitte zentriert
+      wird. Zuvor stand die Zahl zentriert und der Pfeil links daneben — der
+      Block saß dadurch außermittig und stieß auf der unteren Wertzeile gegen
+      den Kreisrand. */
   private _zeichneWert(
     knoten: Knoten, eintrag: KnotenWert, index: number, schwelle: number,
-    mass: Massstab, inhalt: KnotenInhalt,
+    schrift: number, inhalt: KnotenInhalt,
   ): SVGTemplateResult {
     const y = knoten.y + (inhalt.werteY[index] ?? inhalt.werteY[0] ?? 0)
     const text = leistung(eintrag.wert.wert, schwelle)
     const unbekannt = eintrag.wert.wert === null
-    const breite = text.length * zeichenBreite(mass.schrift)
-    const pfeilX = knoten.x - breite / 2 - 6
+    const mitPfeil = Boolean(eintrag.richtung) && !unbekannt
+
+    const textBreite = text.length * zeichenBreite(schrift)
+    const links = knoten.x - (textBreite + (mitPfeil ? PFEIL_PLATZ : 0)) / 2
 
     return svg`
       <g style=${eintrag.farbe ? `color: var(${eintrag.farbe})` : nothing}>
-        ${eintrag.richtung && !unbekannt
-          ? richtungsPfeil(pfeilX, y - mass.schrift / 3, eintrag.richtung) : null}
+        ${mitPfeil
+          ? richtungsPfeil(links + 4, y - schrift / 3, eintrag.richtung!) : null}
         <text
           class=${`wert${unbekannt ? ' unbekannt' : ''}`}
-          x=${eintrag.richtung && !unbekannt ? knoten.x + 4 : knoten.x} y=${y}
-          font-size=${mass.schrift}
+          x=${mitPfeil ? links + PFEIL_PLATZ + textBreite / 2 : knoten.x} y=${y}
+          font-size=${schrift}
         >${text}</text>
       </g>
     `
@@ -873,16 +890,7 @@ interface KnotenTeil {
   randlos?: boolean
   /** Eine Zeile oder mehrere. Mehr als drei passen nicht unter den Knoten. */
   untertitel?: string | string[]
-  untertitelBreit?: boolean
   zusatz?: string
-}
-
-/** SVG-Text kann nicht von selbst auslassen. Gekürzt wird deshalb hier, nach
-    einer mittleren Zeichenbreite — der volle Text steht im `<title>`. */
-export function kuerze(text: string, maxBreite: number, schrift: number): string {
-  const zeichen = Math.floor(maxBreite / zeichenBreite(schrift))
-  if (text.length <= zeichen) return text
-  return `${text.slice(0, Math.max(1, zeichen - 1)).trimEnd()}…`
 }
 
 const HINWEIS_TEXTE: Record<Hinweis, string> = {

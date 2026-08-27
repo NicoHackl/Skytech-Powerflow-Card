@@ -31,6 +31,9 @@ export interface Kante {
   /** CSS-Variable der Flussfarbe, z. B. `--spfc-pv`. */
   farbe: string
   beschreibung: string
+  /** Spaltenabstand der Geometrie. Bestimmt, wie weit der senkrechte Lauf von
+      der Quelle abrückt. */
+  spalte: number
 }
 
 /** Punktdauer aus einem **festen** Erwartungsbereich, nicht aus dem gerade
@@ -53,7 +56,7 @@ export function fliesst(wert: number | null | undefined): boolean {
 export function zeichneKante(
   kante: Kante, animation: boolean, minLeistung: number, maxLeistung: number, index: number,
 ): SVGTemplateResult {
-  const pfad = kantenPfad(kante.von, kante.nach)
+  const pfad = kantenPfad(kante.von, kante.nach, kante.spalte)
   const id = `spfc-kante-${index}`
   const aktiv = fliesst(kante.wert)
 

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import {
-  baueGeometrie, findeKnoten, kantenPfad, knotenInhalt, mindestBreite,
-  KOMPAKT, LUFT_AUSSEN, LUFT_INNEN, NORMAL,
-  type Geometrie, type Knoten, type LayoutEingabe,
+  baueGeometrie, beschriftungsBreite, findeKnoten, kantenPfad, knotenInhalt, korridorX,
+  mindestBreite, wertSchrift, zeichenBreite,
+  KOMPAKT, LUFT_AUSSEN, LUFT_INNEN, LUFT_KORRIDOR, NORMAL,
+  type Geometrie, type Knoten, type LayoutEingabe, type Massstab,
 } from '../src/layout'
 
 /* Geometrie. Gerechnet wird in Bildschirmpunkten — geprüft wird deshalb, dass
@@ -162,11 +163,33 @@ describe('Kantenpfade', () => {
     expect(kantenPfad(knoten('a', 0, 0), knoten('b', 0, 200))).toBe('M 0 40 V 160')
   })
 
-  test('versetzte Knoten bekommen genau eine gerundete Ecke', () => {
+  test('versetzte Knoten werden seitlich verlassen, mit zwei gerundeten Ecken', () => {
     const pfad = kantenPfad(knoten('a', 0, 0), knoten('b', 200, 150))
-    expect(pfad).toBe('M 0 40 V 128 Q 0 150 22 150 H 160')
-    // Keine Diagonale: der Pfad besteht nur aus V, Q und H.
+    expect(pfad).toBe('M 40 0 H 78 Q 100 0 100 22 V 128 Q 100 150 122 150 H 160')
+    // Keine Diagonale: der Pfad besteht nur aus H, Q und V.
     expect(pfad).not.toMatch(/L/)
+  })
+
+  // Der eigentliche Fehler, den der seitliche Ausgang behebt: die Beschriftung
+  // steht auf der Knotenmitte, und eine dort abgehende Linie lief mitten durch
+  // sie hindurch — gemessen an der laufenden Anlage für Batterie, Haus und Netz.
+  test('der senkrechte Lauf liegt nicht auf einer Knotenmitte', () => {
+    const a = knoten('a', 100, 0)
+    const b = knoten('b', 300, 150)
+    const senkrechte = Number(/V \S+ Q (\S+)/.exec(kantenPfad(a, b))![1])
+    expect(senkrechte).not.toBe(a.x)
+    expect(senkrechte).not.toBe(b.x)
+    expect(senkrechte).toBeGreaterThan(a.x)
+    expect(senkrechte).toBeLessThan(b.x)
+  })
+
+  test('Kanten durch denselben Zwischenraum teilen sich eine Senkrechte', () => {
+    const haus = knoten('haus', 100, 100)
+    const oben = knoten('oben', 300, 0)
+    const unten = knoten('unten', 300, 300)
+    expect(korridorX(haus, oben)).toBe(korridorX(haus, unten))
+    // Und sie liegt genau zwischen den beiden Spaltenmitten.
+    expect(korridorX(haus, oben)).toBe(200)
   })
 
   test('Hin- und Rückrichtung liegen nicht auf demselben Pfad', () => {
@@ -180,10 +203,23 @@ describe('Schmale Karte', () => {
   // Das ist der Kern: eine Handykarte darf NICHT verkleinert werden. Wird sie
   // es doch, schrumpft die Schrift mit — gemessen fiel sie bei 340 px von 12
   // auf 8,5 px, und Symbol, Wert und Beschriftung liefen ineinander.
+  // Gemessen an der laufenden Anlage: die Karte ist rund 27 px schmaler als das
+  // Fenster. Ein 360-px-Telefon ergibt also etwa 333 px Karte, ein 390er 363.
   test('bei Handybreite passt die Zeichnung ohne Verkleinerung hinein', () => {
-    for (const breite of [320, 340, 375, 390]) {
+    for (const breite of [333, 340, 363, 375, 390]) {
       const geometrie = baueGeometrie(eingabe({ breite, geraeteIds: geraete(4), rest: true }))
       expect(geometrie.breite, `${breite} px`).toBeLessThanOrEqual(breite)
+    }
+  })
+
+  // Darunter wird verkleinert — dann zählt nicht mehr der Maßstab, sondern was
+  // auf dem Schirm ankommt. Das war der ursprüngliche Fehler: bei 340 px fiel
+  // die Schrift auf 8,5 px, und Symbol, Wert und Beschriftung liefen ineinander.
+  test('auch auf sehr schmalen Karten bleibt die Schrift lesbar', () => {
+    for (const breite of [280, 300, 320]) {
+      const geometrie = baueGeometrie(eingabe({ breite, geraeteIds: geraete(4), rest: true }))
+      const massstab = Math.min(1, breite / geometrie.breite)
+      expect(geometrie.mass.schrift * massstab, `${breite} px`).toBeGreaterThanOrEqual(10)
     }
   })
 
@@ -209,14 +245,15 @@ describe('Schmale Karte', () => {
   })
 
   test('die Mindestbreiten stimmen mit der Schwelle überein', () => {
-    expect(mindestBreite(NORMAL, 4)).toBe(416)
-    expect(mindestBreite(KOMPAKT, 4)).toBe(318)
+    expect(mindestBreite(NORMAL, 4)).toBe(452)
+    expect(mindestBreite(KOMPAKT, 4)).toBe(328)
   })
 
-  test('auch mit zwei Gerätespalten wird auf dem Handy nicht verkleinert', () => {
+  test('auch mit zwei Gerätespalten bleibt die Schrift auf dem Handy lesbar', () => {
     const geometrie = baueGeometrie(eingabe({ breite: 400, geraeteIds: geraete(8) }))
     expect(geometrie.mass.name).toBe('kompakt')
-    expect(geometrie.breite).toBeLessThanOrEqual(400)
+    const massstab = Math.min(1, 400 / geometrie.breite)
+    expect(geometrie.mass.schrift * massstab).toBeGreaterThanOrEqual(11)
   })
 })
 
@@ -227,7 +264,7 @@ describe('Abstände im Knoten', () => {
     for (const anzahl of [1, 2]) {
       test(`${mass.name}, ${anzahl} Wert(e): Symbol und Wert haben Luft`, () => {
         const inhalt = knotenInhalt(mass, anzahl)
-        const symbolUnterkante = inhalt.symbolY + mass.symbol / 2
+        const symbolUnterkante = inhalt.symbolY + inhalt.symbol / 2
         // Oberkante der Versalien der ersten Wertzeile.
         const wertOberkante = inhalt.werteY[0]! - mass.schrift
         expect(wertOberkante - symbolUnterkante).toBeGreaterThanOrEqual(LUFT_INNEN)
@@ -235,7 +272,7 @@ describe('Abstände im Knoten', () => {
 
       test(`${mass.name}, ${anzahl} Wert(e): der Inhalt bleibt im Kreis`, () => {
         const inhalt = knotenInhalt(mass, anzahl)
-        expect(inhalt.symbolY - mass.symbol / 2).toBeGreaterThan(-mass.r)
+        expect(inhalt.symbolY - inhalt.symbol / 2).toBeGreaterThan(-mass.r)
         expect(inhalt.werteY[inhalt.werteY.length - 1]!).toBeLessThan(mass.r)
       })
     }
@@ -322,4 +359,113 @@ describe('AC-Speicher', () => {
       expect(geometrie.breite, `${anzahl} Speicher`).toBeLessThanOrEqual(340)
     }
   })
+})
+
+describe('Beschriftung und Kantenkorridor', () => {
+  // Der Korridor liegt bei ±spalte/2 um die Spaltenmitte, die Beschriftung
+  // steht ebenfalls auf der Spaltenmitte. Berührten sich beide, liefe die
+  // Linie wieder durch den Text — genau der Fehler, der behoben wurde.
+  for (const mass of [NORMAL, KOMPAKT] as Massstab[]) {
+    test(`${mass.name}: die Beschriftung hält über den ganzen Spaltenbereich Abstand`, () => {
+      for (let spalte = mass.spalteMin; spalte <= mass.spalteMax; spalte += 1) {
+        const halbe = beschriftungsBreite(mass, spalte) / 2
+        expect(halbe, `${spalte} px Spalte`).toBeLessThanOrEqual(spalte / 2 - LUFT_KORRIDOR)
+      }
+    })
+
+    // Die Untergrenze „mindestens so breit wie der Knoten" darf den Abstand
+    // nicht wieder aufheben. Sie tut es genau dann nicht, wenn der kleinste
+    // Spaltenabstand den Knoten samt beidseitigem Freiraum trägt.
+    test(`${mass.name}: der kleinste Spaltenabstand trägt Knoten und Freiraum`, () => {
+      expect(mass.spalteMin).toBeGreaterThanOrEqual(2 * mass.r + 2 * LUFT_KORRIDOR)
+    })
+  }
+})
+
+describe('Werte im Kreis', () => {
+  const passt = (zeichen: number, mitPfeil: boolean, r: number, y: number, schrift: number) => {
+    const unterkante = Math.abs(y) + schrift * 0.25
+    const sehne = 2 * Math.sqrt(r * r - unterkante * unterkante)
+    return zeichen * zeichenBreite(schrift) + (mitPfeil ? 10 : 0) <= sehne
+  }
+
+  for (const mass of [NORMAL, KOMPAKT] as Massstab[]) {
+    test(`${mass.name}: ein kurzer Wert behält den vollen Grad`, () => {
+      const inhalt = knotenInhalt(mass, 1)
+      expect(wertSchrift(3, true, mass.r, inhalt.werteY[0]!, mass.schrift)).toBe(mass.schrift)
+    })
+
+    // Die Engstelle: bei zwei Werten liegt die zweite Grundlinie tief im
+    // schmalen Teil des Kreises. Gemessen blieben dort im kompakten Maßstab
+    // 31 px Sehne, „231 W" mit Pfeil braucht 42.
+    test(`${mass.name}: „231 W" bleibt auch auf der zweiten Zeile im Kreis`, () => {
+      const y = knotenInhalt(mass, 2).werteY[1]!
+      const grad = wertSchrift(5, true, mass.r, y, mass.schrift)
+      expect(grad).toBeGreaterThanOrEqual(mass.schrift - 2)
+      expect(passt(5, true, mass.r, y, grad), `${grad} px`).toBe(true)
+    })
+
+    // Ein Wert in Kilowatt braucht sieben Zeichen. Im kompakten Maßstab passt
+    // das auf der zweiten Zeile in keinen Kreis — auch nicht ohne Symbol, die
+    // Sehne gibt es schlicht nicht her. Er darf dann überstehen, aber nur so
+    // weit, dass er den senkrechten Korridor der Kanten nicht erreicht.
+    test(`${mass.name}: ein überlanger Wert bleibt vor dem Kantenkorridor`, () => {
+      const y = knotenInhalt(mass, 2).werteY[1]!
+      const grad = wertSchrift(7, true, mass.r, y, mass.schrift)
+      expect(grad).toBeLessThanOrEqual(mass.schrift)
+      expect(grad).toBeGreaterThanOrEqual(mass.schrift - 2)
+
+      const unterkante = Math.abs(y) + grad * 0.25
+      const sehne = 2 * Math.sqrt(mass.r * mass.r - unterkante * unterkante)
+      const ueberstand = Math.max(0, (7 * zeichenBreite(grad) + 10 - sehne) / 2)
+      expect(ueberstand, `${grad} px`).toBeLessThanOrEqual(mass.spalteMin / 2 - mass.r)
+    })
+
+    test(`${mass.name}: zwei Werte lassen das Symbol schrumpfen`, () => {
+      expect(knotenInhalt(mass, 1).symbol).toBe(mass.symbol)
+      expect(knotenInhalt(mass, 2).symbol).toBeLessThan(mass.symbol)
+    })
+  }
+
+  test('unter die Untergrenze wird nicht verkleinert', () => {
+    // Ein absurd langer Wert soll nicht in Unlesbarkeit verschwinden — dann
+    // ragt er lieber über den Rand und fällt auf.
+    expect(wertSchrift(40, true, NORMAL.r, 30, NORMAL.schrift)).toBe(NORMAL.schrift - 2)
+  })
+})
+
+describe('Keine Kante kreuzt eine Beschriftung', () => {
+  // Die Anlage, an der gemessen wurde: Erzeugung, Netz, Hausspeicher, ein
+  // AC-Speicher, vier Verbraucher und der Rest.
+  const anlage = (breite: number) => baueGeometrie(eingabe({
+    breite, geraeteIds: geraete(4), rest: true, speicherIds: ['acspeicher1'],
+  }))
+
+  for (const breite of [333, 400, 500, 700]) {
+    test(`${breite} px: jeder senkrechte Lauf hält Abstand zu jedem Textblock`, () => {
+      const geometrie = anlage(breite)
+      const inhalt = knotenInhalt(geometrie.mass, 1)
+      const halbe = beschriftungsBreite(geometrie.mass, geometrie.spalte) / 2
+
+      for (const von of geometrie.knoten) {
+        for (const nach of geometrie.knoten) {
+          // Nur Kanten mit beiden Anteilen laufen durch einen Korridor;
+          // fluchtende Knoten werden gerade verbunden.
+          if (von === nach || Math.abs(nach.x - von.x) < 1 || Math.abs(nach.y - von.y) < 1) continue
+          const x = korridorX(von, nach, geometrie.spalte)
+
+          for (const knoten of geometrie.knoten) {
+            const oben = knoten.y + knoten.r
+            const unten = oben + inhalt.textBlock
+            const laeuftVorbei = Math.max(von.y, nach.y) < oben || Math.min(von.y, nach.y) > unten
+            if (laeuftVorbei) continue
+            expect(
+              Math.abs(x - knoten.x),
+              `${von.id}→${nach.id} bei ${knoten.id}`,
+            ).toBeGreaterThanOrEqual(halbe)
+          }
+        }
+      }
+    })
+  }
 })

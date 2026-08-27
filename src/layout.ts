@@ -68,17 +68,47 @@ export interface LayoutEingabe {
 }
 
 export const NORMAL: Massstab = {
-  name: 'normal', r: 40, symbol: 24, schrift: 12, untertitel: 11,
-  spalteMin: 104, spalteMax: 150,
+  name: 'normal', r: 46, symbol: 28, schrift: 14, untertitel: 12,
+  spalteMin: 112, spalteMax: 160,
 }
 
 export const KOMPAKT: Massstab = {
-  name: 'kompakt', r: 30, symbol: 20, schrift: 11, untertitel: 10,
-  spalteMin: 78, spalteMax: 104,
+  name: 'kompakt', r: 32, symbol: 21, schrift: 12, untertitel: 11,
+  spalteMin: 80, spalteMax: 112,
 }
 
 export const ECKE = 22
 const RAND = 12
+
+/** Abstand, den eine Beschriftung zum senkrechten Korridor der Kanten hält.
+
+    Der Korridor liegt auf halber Strecke zwischen zwei Spaltenmitten, also bei
+    ±`spalte/2`; eine Beschriftung darf deshalb höchstens `spalte − 2·LUFT`
+    breit werden. Damit die Untergrenze „mindestens so breit wie der Knoten"
+    das nicht wieder aufhebt, erfüllen beide Maßstäbe
+    `spalteMin ≥ 2·r + 2·LUFT_KORRIDOR`. */
+export const LUFT_KORRIDOR = 8
+
+/** Mittlere Zeichenbreite je Schriftgröße. Grundlage fürs Kürzen und für die
+    Prüfung, ob ein Wert noch in den Kreis passt — SVG-Text kann weder von
+    selbst auslassen noch von selbst kleiner werden. Fest auf 12 px zu
+    kalibrieren ginge im kompakten Maßstab daneben. */
+const ZEICHEN_FAKTOR = 0.53
+
+export function zeichenBreite(schrift: number): number {
+  return schrift * ZEICHEN_FAKTOR
+}
+
+/** Breite, die ein Richtungspfeil samt Abstand neben einem Wert belegt. */
+export const PFEIL_PLATZ = 10
+
+/** So stark schrumpft das Symbol, wenn ein Knoten **zwei** Werte trägt.
+
+    Zwei Zeilen drücken die untere Grundlinie sonst so tief in den Kreis, dass
+    daneben keine Zahl mehr Platz hat: im kompakten Maßstab blieben dort 31 px
+    Sehne, „231 W" mit Pfeil braucht 42. Das Symbol ist Schmuck, die Zahlen
+    sind die Aussage — also weicht das Symbol. */
+const SYMBOL_FAKTOR_MEHRWERT = 0.65
 
 /** Mindestabstand zwischen Symbol und Wert **im** Knoten. Darunter lesen sich
     die beiden als ein Klumpen — gemessen waren es 1,4 px. */
@@ -104,6 +134,8 @@ const ZWEI_SPALTEN_AB = 7
    -------------------------------------------------------------------------- */
 
 export interface KnotenInhalt {
+  /** Kantenlänge des Symbols. Bei zwei Werten kleiner als `mass.symbol`. */
+  symbol: number
   /** Mitte des Symbols, relativ zur Knotenmitte. */
   symbolY: number
   /** Grundlinien der Werte, relativ zur Knotenmitte. */
@@ -125,14 +157,15 @@ export interface KnotenInhalt {
     und keine war geprüft. */
 export function knotenInhalt(mass: Massstab, anzahlWerte: number): KnotenInhalt {
   const werte = Math.max(1, anzahlWerte)
+  const symbol = werte > 1 ? Math.round(mass.symbol * SYMBOL_FAKTOR_MEHRWERT) : mass.symbol
   const zeilenAbstand = mass.schrift + 3
-  const innenHoehe = mass.symbol + LUFT_INNEN + mass.schrift + (werte - 1) * zeilenAbstand
+  const innenHoehe = symbol + LUFT_INNEN + mass.schrift + (werte - 1) * zeilenAbstand
   const oben = -innenHoehe / 2
 
   const werteY: number[] = []
   for (let index = 0; index < werte; index += 1) {
     // Grundlinie: Oberkante des Blocks + Symbol + Luft + eine volle Zeile.
-    werteY.push(oben + mass.symbol + LUFT_INNEN + mass.schrift + index * zeilenAbstand)
+    werteY.push(oben + symbol + LUFT_INNEN + mass.schrift + index * zeilenAbstand)
   }
 
   // Der Schritt richtet sich nach der GRÖSSEREN der beiden Schriften: er
@@ -142,7 +175,8 @@ export function knotenInhalt(mass: Massstab, anzahlWerte: number): KnotenInhalt 
   const beschriftungY = LUFT_AUSSEN + mass.schrift
 
   return {
-    symbolY: oben + mass.symbol / 2,
+    symbol,
+    symbolY: oben + symbol / 2,
     werteY,
     beschriftungY,
     untertitelSchritt,
@@ -239,13 +273,25 @@ export function findeKnoten(geometrie: Geometrie, id: string): Knoten | undefine
   return geometrie.knoten.find((knoten) => knoten.id === id)
 }
 
-/** Rechtwinklige Führung mit **einer** gerundeten Ecke.
+/** Rechtwinklige Führung: seitlich aus dem Knoten, senkrecht durch den
+    Zwischenraum, seitlich in den Zielknoten.
 
-    Senkrechter Stummel aus dem Knoten, Ecke, waagerechter Lauf in den
-    Zielknoten — dieselbe Form wie im Vorbild. Diagonalen gibt es nicht mehr:
-    sie kreuzten die Fläche zwischen den Spalten und ließen die Karte unruhig
-    wirken. Fluchten zwei Knoten, wird eine gerade Linie gezogen. */
-export function kantenPfad(von: Knoten, nach: Knoten): string {
+    Der senkrechte Lauf liegt **nicht** auf der Knotenmitte, sondern auf halber
+    Strecke zwischen den beiden Kreisrändern. Das ist der Kern: die Beschriftung
+    steht auf der Knotenmitte, und eine dort abgehende Linie lief mitten durch
+    sie hindurch — gemessen an der laufenden Anlage für Batterie, Haus und Netz.
+
+    Der Korridor liegt eine **halbe Spalte** neben der Quelle. Für benachbarte
+    Spalten ist das genau die Mitte dazwischen; überspringt eine Kante eine
+    Spalte, bleibt sie trotzdem dicht an der Quelle, statt auf der übersprungenen
+    Spaltenmitte zu landen — dort stünde deren Beschriftung.
+
+    Alle Kanten, die denselben Knoten zur selben Seite verlassen, teilen sich
+    damit eine Senkrechte: der gemeinsame Ausgang des Hauses zu allen
+    Überschussverbrauchern entsteht aus der Formel, nicht aus einer Sonderregel.
+
+    Diagonalen gibt es nicht. Fluchten zwei Knoten, wird gerade gezogen. */
+export function kantenPfad(von: Knoten, nach: Knoten, spalte?: number): string {
   const dx = nach.x - von.x
   const dy = nach.y - von.y
 
@@ -263,14 +309,77 @@ export function kantenPfad(von: Knoten, nach: Knoten): string {
 
   const hoch = Math.sign(dy)
   const seite = Math.sign(dx)
-  const startY = von.y + hoch * von.r
+  const startX = von.x + seite * von.r
   const zielX = nach.x - seite * nach.r
-  const ecke = Math.min(ECKE, Math.abs(nach.y - startY), Math.abs(zielX - von.x))
+  const korridor = korridorX(von, nach, spalte)
+  const ecke = Math.min(
+    ECKE,
+    Math.abs(korridor - startX),
+    Math.abs(zielX - korridor),
+    Math.abs(dy) / 2,
+  )
 
-  return `M ${r(von.x)} ${r(startY)} `
+  return `M ${r(startX)} ${r(von.y)} `
+    + `H ${r(korridor - seite * ecke)} `
+    + `Q ${r(korridor)} ${r(von.y)} ${r(korridor)} ${r(von.y + hoch * ecke)} `
     + `V ${r(nach.y - hoch * ecke)} `
-    + `Q ${r(von.x)} ${r(nach.y)} ${r(von.x + seite * ecke)} ${r(nach.y)} `
+    + `Q ${r(korridor)} ${r(nach.y)} ${r(korridor + seite * ecke)} ${r(nach.y)} `
     + `H ${r(zielX)}`
+}
+
+/** Auf welcher Senkrechten die Kante zwischen diesen beiden Knoten läuft.
+
+    Ohne `spalte` — in Tests und beim Zeichnen einzelner Kanten — gilt die Mitte
+    zwischen beiden Knoten. Ist der Spaltenabstand bekannt, wird höchstens eine
+    halbe Spalte von der Quelle abgerückt: sonst landete eine Kante, die eine
+    Spalte überspringt, genau auf deren Beschriftung. */
+export function korridorX(von: Knoten, nach: Knoten, spalte?: number): number {
+  const seite = Math.sign(nach.x - von.x)
+  const halbeStrecke = Math.abs(nach.x - von.x) / 2
+  const abstand = spalte === undefined ? halbeStrecke : Math.min(halbeStrecke, spalte / 2)
+  return von.x + seite * abstand
+}
+
+/** Größter Schriftgrad ≤ `basis`, bei dem `zeichen` Zeichen samt Pfeil auf der
+    Grundlinie `grundlinie` noch zwischen die Kreisränder passen.
+
+    Der Kreis wird nach unten hin schmal. Bei zwei Werten liegt die zweite
+    Grundlinie so tief, dass die Sehne dort nur einen Bruchteil des
+    Durchmessers misst — ohne diese Prüfung ragte die Zahl über den Rand. */
+export function wertSchrift(
+  zeichen: number, mitPfeil: boolean, radius: number, grundlinie: number, basis: number,
+): number {
+  // Unter diesen Grad wird nicht verkleinert: lieber eine Zahl, die den Kreis
+  // um ein Haar überschreitet, als eine, die niemand mehr liest.
+  const untergrenze = Math.max(1, basis - 2)
+  for (let schrift = basis; schrift > untergrenze; schrift -= 0.5) {
+    if (passtInKreis(zeichen, mitPfeil, radius, grundlinie, schrift)) return schrift
+  }
+  return untergrenze
+}
+
+function passtInKreis(
+  zeichen: number, mitPfeil: boolean, radius: number, grundlinie: number, schrift: number,
+): boolean {
+  // Maßgeblich ist die Unterkante der Zahl, nicht ihre Grundlinie.
+  const unterkante = Math.abs(grundlinie) + schrift * 0.25
+  if (unterkante >= radius) return false
+  const sehne = 2 * Math.sqrt(radius * radius - unterkante * unterkante)
+  return zeichen * zeichenBreite(schrift) + (mitPfeil ? PFEIL_PLATZ : 0) <= sehne
+}
+
+/** SVG-Text kann nicht von selbst auslassen. Gekürzt wird deshalb hier, nach
+    einer mittleren Zeichenbreite — der volle Text steht im `<title>`. */
+export function kuerze(text: string, maxBreite: number, schrift: number): string {
+  const zeichen = Math.floor(maxBreite / zeichenBreite(schrift))
+  if (text.length <= zeichen) return text
+  return `${text.slice(0, Math.max(1, zeichen - 1)).trimEnd()}…`
+}
+
+/** Wie breit eine Beschriftung unter diesem Knoten werden darf, ohne den
+    senkrechten Korridor der Kanten zu berühren. */
+export function beschriftungsBreite(mass: Massstab, spalte: number): number {
+  return Math.max(mass.r * 2, spalte - 2 * LUFT_KORRIDOR)
 }
 
 function r(wert: number): number {
