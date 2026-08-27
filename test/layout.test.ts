@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
-  baueGeometrie, findeKnoten, kantenPfad, BESCHRIFTUNG_H, KNOTEN_R,
+  baueGeometrie, findeKnoten, kantenPfad, knotenInhalt, mindestBreite,
+  KOMPAKT, LUFT_AUSSEN, LUFT_INNEN, NORMAL,
   type Geometrie, type Knoten, type LayoutEingabe,
 } from '../src/layout'
 
@@ -20,18 +21,17 @@ function geraete(anzahl: number): string[] {
 }
 
 /** Der Platz, den ein Knoten samt Beschriftung und Untertitel beansprucht. */
-function kasten(knoten: Knoten) {
+function kasten(knoten: Knoten, geometrie: Geometrie) {
+  const block = knotenInhalt(geometrie.mass, 1).textBlock
   const oben = knoten.beschriftung === 'oben'
-    ? knoten.y - knoten.r - BESCHRIFTUNG_H
+    ? knoten.y - knoten.r - block
     : knoten.y - knoten.r
-  const unten = knoten.beschriftung === 'oben'
-    ? knoten.y + knoten.r + BESCHRIFTUNG_H
-    : knoten.y + knoten.r + BESCHRIFTUNG_H + 14
+  const unten = knoten.y + knoten.r + block
   return { links: knoten.x - knoten.r, rechts: knoten.x + knoten.r, oben, unten }
 }
 
 function ueberschneidungsfrei(geometrie: Geometrie): boolean {
-  const kaesten = geometrie.knoten.map(kasten)
+  const kaesten = geometrie.knoten.map((k) => kasten(k, geometrie))
   for (let a = 0; a < kaesten.length; a += 1) {
     for (let b = a + 1; b < kaesten.length; b += 1) {
       const l = kaesten[a]!
@@ -57,7 +57,7 @@ describe('Textblock und Knoten', () => {
     const oben = findeKnoten(geometrie, 'geraet_1')!
     const unten = findeKnoten(geometrie, 'geraet_2')!
     const luft = (unten.y - unten.r) - (oben.y + oben.r)
-    expect(luft).toBeGreaterThanOrEqual(BESCHRIFTUNG_H + 14 + 6)
+    expect(luft).toBeGreaterThanOrEqual(knotenInhalt(geometrie.mass, 1).textBlock + 6)
   })
 
   test('die oberste Reihe beschriftet über dem Kreis', () => {
@@ -104,12 +104,10 @@ describe('Grundanordnung', () => {
     expect(spalten(7)).toBe(2)
   })
 
-  test('die Knoten behalten ihre Größe, egal wie breit die Karte ist', () => {
-    // Anders als in der ersten Fassung skaliert nichts mit der Kartenbreite —
-    // sonst schrumpft die Beschriftung unter die Lesbarkeit.
-    for (const breite of [320, 500, 900]) {
+  test('die Knoten behalten ihre Größe innerhalb eines Maßstabs', () => {
+    for (const breite of [500, 700, 900]) {
       const geometrie = baueGeometrie(eingabe({ breite }))
-      expect(findeKnoten(geometrie, 'haus')!.r, `${breite} px`).toBe(KNOTEN_R)
+      expect(findeKnoten(geometrie, 'haus')!.r, `${breite} px`).toBe(NORMAL.r)
     }
   })
 
@@ -176,4 +174,101 @@ describe('Kantenpfade', () => {
     const b = knoten('b', 200, 150)
     expect(kantenPfad(a, b)).not.toBe(kantenPfad(b, a))
   })
+})
+
+describe('Schmale Karte', () => {
+  // Das ist der Kern: eine Handykarte darf NICHT verkleinert werden. Wird sie
+  // es doch, schrumpft die Schrift mit — gemessen fiel sie bei 340 px von 12
+  // auf 8,5 px, und Symbol, Wert und Beschriftung liefen ineinander.
+  test('bei Handybreite passt die Zeichnung ohne Verkleinerung hinein', () => {
+    for (const breite of [320, 340, 375, 390]) {
+      const geometrie = baueGeometrie(eingabe({ breite, geraeteIds: geraete(4), rest: true }))
+      expect(geometrie.breite, `${breite} px`).toBeLessThanOrEqual(breite)
+    }
+  })
+
+  test('unterhalb der Schwelle gilt der kompakte Maßstab', () => {
+    const mit = (breite: number) =>
+      baueGeometrie(eingabe({ breite, geraeteIds: geraete(4) })).mass.name
+    expect(mit(500)).toBe('normal')
+    expect(mit(360)).toBe('kompakt')
+  })
+
+  test('ohne Geräte reichen drei Spalten, dort bleibt es normal', () => {
+    // Weniger Spalten heißt geringere Mindestbreite — dann gibt es keinen
+    // Grund, kleiner zu zeichnen.
+    expect(baueGeometrie(eingabe({ breite: 360 })).mass.name).toBe('normal')
+  })
+
+  test('der kompakte Maßstab zeichnet kleiner, nicht kleiner skaliert', () => {
+    const kompakt = baueGeometrie(eingabe({ breite: 360, geraeteIds: geraete(4) }))
+    expect(kompakt.mass.r).toBe(KOMPAKT.r)
+    expect(kompakt.mass.schrift).toBeLessThan(NORMAL.schrift)
+    // Die Schrift bleibt lesbar, statt mit dem Maßstab wegzurutschen.
+    expect(kompakt.mass.schrift).toBeGreaterThanOrEqual(11)
+  })
+
+  test('die Mindestbreiten stimmen mit der Schwelle überein', () => {
+    expect(mindestBreite(NORMAL, 4)).toBe(416)
+    expect(mindestBreite(KOMPAKT, 4)).toBe(318)
+  })
+
+  test('auch mit zwei Gerätespalten wird auf dem Handy nicht verkleinert', () => {
+    const geometrie = baueGeometrie(eingabe({ breite: 400, geraeteIds: geraete(8) }))
+    expect(geometrie.mass.name).toBe('kompakt')
+    expect(geometrie.breite).toBeLessThanOrEqual(400)
+  })
+})
+
+describe('Abstände im Knoten', () => {
+  // Gemessen an der laufenden Anlage: Symbol zu Wert 1,4 px, Kreisrand zu
+  // Beschriftung 2,3 px. Beides las sich als ein Klumpen.
+  for (const mass of [NORMAL, KOMPAKT]) {
+    for (const anzahl of [1, 2]) {
+      test(`${mass.name}, ${anzahl} Wert(e): Symbol und Wert haben Luft`, () => {
+        const inhalt = knotenInhalt(mass, anzahl)
+        const symbolUnterkante = inhalt.symbolY + mass.symbol / 2
+        // Oberkante der Versalien der ersten Wertzeile.
+        const wertOberkante = inhalt.werteY[0]! - mass.schrift
+        expect(wertOberkante - symbolUnterkante).toBeGreaterThanOrEqual(LUFT_INNEN)
+      })
+
+      test(`${mass.name}, ${anzahl} Wert(e): der Inhalt bleibt im Kreis`, () => {
+        const inhalt = knotenInhalt(mass, anzahl)
+        expect(inhalt.symbolY - mass.symbol / 2).toBeGreaterThan(-mass.r)
+        expect(inhalt.werteY[inhalt.werteY.length - 1]!).toBeLessThan(mass.r)
+      })
+    }
+
+    test(`${mass.name}: Kreisrand und Beschriftung haben Luft`, () => {
+      const inhalt = knotenInhalt(mass, 1)
+      expect(inhalt.beschriftungY - mass.schrift).toBeGreaterThanOrEqual(LUFT_AUSSEN)
+    })
+
+    test(`${mass.name}: zwei Werte stehen untereinander, nicht ineinander`, () => {
+      const inhalt = knotenInhalt(mass, 2)
+      expect(inhalt.werteY[1]! - inhalt.werteY[0]!).toBeGreaterThanOrEqual(mass.schrift + 2)
+    })
+  }
+})
+
+describe('Beschriftung und Untertitel', () => {
+  // Gemessen: Beschriftung und Untertitel standen 12 px auseinander bei 11 px
+  // Schrift — Unterlänge und Oberlänge berührten sich, der Name lief in den
+  // Grund darunter.
+  for (const mass of [NORMAL, KOMPAKT]) {
+    test(`${mass.name}: Beschriftung und Untertitel überlappen nicht`, () => {
+      const inhalt = knotenInhalt(mass, 1)
+      expect(inhalt.untertitelSchritt).toBeGreaterThanOrEqual(mass.schrift * 1.25)
+      expect(inhalt.untertitelSchritt).toBeGreaterThanOrEqual(mass.untertitel * 1.25)
+    })
+
+    test(`${mass.name}: der Textblock trägt zwei Untertitelzeilen`, () => {
+      // Die Erzeugungs-Aufschlüsselung braucht zwei; passen sie nicht in die
+      // reservierte Höhe, ragen sie in den nächsten Knoten.
+      const inhalt = knotenInhalt(mass, 1)
+      const gebraucht = inhalt.beschriftungY + 2 * inhalt.untertitelSchritt
+      expect(inhalt.textBlock).toBeGreaterThanOrEqual(gebraucht)
+    })
+  }
 })

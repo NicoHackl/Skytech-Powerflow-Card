@@ -11,6 +11,25 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+## [0.2.1] — 27.08.2026
+
+### Behoben
+
+- **Auf schmalen Karten liefen Leistungsangaben, Namen und Symbole ineinander.** Zwei Ursachen,
+  beide behoben:
+  - Die Anordnung brauchte mindestens 416 px Breite. Darunter wurde die **ganze Zeichnung**
+    verkleinert und die Schrift mit ihr — bei 340 px Kartenbreite von 12 auf 8,5 px. Die Karte
+    kennt jetzt einen zweiten, kompakten Maßstab mit kleineren Knoten und Symbolen. Sie wird damit
+    kleiner **gezeichnet** statt verkleinert; ab rund 320 px bleibt die Schrift bei ihren echten
+    11 px.
+  - Die Abstände im Knoten waren schon im Entwurf zu klein: Symbol zu Wert 1,4 px, Kreisrand zu
+    Beschriftung 2,3 px. Sie werden jetzt aus Symbol- und Schriftgröße gerechnet, mit 6 px als
+    Untergrenze — und sind geprüft, was vorher nicht der Fall war.
+- Beschriftung und Untertitel standen nur 12 px auseinander; Unterlängen und Oberlängen berührten
+  sich. Der Zeilenabstand richtet sich jetzt nach der Schriftgröße.
+- Die Karte hatte seitlich eine Polsterung, die von der gemessenen Breite abging — dadurch wurde
+  die Zeichnung auch dann leicht verkleinert, wenn sie eigentlich gepasst hätte.
+
 ## [0.2.0] — 24.08.2026
 
 ### Geändert

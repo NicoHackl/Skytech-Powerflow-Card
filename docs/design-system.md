@@ -30,22 +30,45 @@ wäre die Karte in einem sparsamen Theme unsichtbar.
 Die Karte **skaliert ihre Inhalte nicht** mit der Kartenbreite (D-007). Sie misst ihre Breite mit
 einem `ResizeObserver` und rechnet in Bildschirmpunkten; die viewBox trägt genau diese Breite.
 
-| Element | Maß |
+Es gibt **zwei Maßstäbe** (D-009). Passt der normale nicht in die gemessene Breite, wird der
+kompakte gezeichnet — die Karte wird also kleiner **gezeichnet**, nicht als Ganzes verkleinert.
+Eine verkleinerte Zeichnung nimmt die Schrift mit: bei 340 px Karte fiel sie so von 12 auf 8,5 px.
+
+| Element | normal | kompakt |
+|---|---|---|
+| Knotendurchmesser | 80 px | 60 px |
+| Symbol | 24 px | 20 px |
+| Wert im Knoten | 12 px | 11 px |
+| Beschriftung | 12 px | 11 px |
+| Untertitel | 11 px | 10 px |
+| Spaltenabstand | 104…150 px | 78…104 px |
+| Mindestbreite bei vier Spalten | 416 px | **318 px** |
+
+| Element | beide Maßstäbe |
 |---|---|
-| Knotendurchmesser | 80 px |
-| Symbol | 24 px |
-| Wert im Knoten | 12 px |
-| Beschriftung | 12 px |
-| Untertitel | 11 px |
 | Strichbreite einer Kante | 1 px, `non-scaling-stroke` |
 | Eckenradius einer Kante | 22 px |
 
-Auf einer breiten Karte wird **zentriert, nicht gedehnt**. Reicht die Breite nicht, rücken die
-Spalten enger zusammen — bis zu einer Grenze, unter der sich die Kreise berühren würden.
+Auf einer breiten Karte wird **zentriert, nicht gedehnt**. Reicht die Breite auch kompakt nicht,
+rücken die Spalten enger zusammen — bis zu einer Grenze, unter der sich die Kreise berühren würden.
 
-Die Zeilenhöhe wird aus dem tatsächlichen Textblock gerechnet (Kreis + Beschriftung + Untertitel
-+ Luft), nicht als Zahl gesetzt. Eine gesetzte Zeilenhöhe war der Grund, warum in der ersten
-Fassung jede Wertzeile im Knoten darunter lag.
+Die Karte hat seitlich **keine Polsterung**: die Zeichnung bringt ihren eigenen Rand mit. Eine
+zweite Polsterung hätte von der gemessenen Breite abgezogen und die Karte doch wieder verkleinert.
+
+**Mindestabstände**, in beiden Maßstäben eingehalten und geprüft:
+
+| Abstand | mindestens |
+|---|---|
+| Symbol → Wert im Knoten | 6 px |
+| Kreisrand → Beschriftung | 6 px |
+| Beschriftung → Untertitel | das 1,35-fache der größeren Schrift |
+
+Der Knoteninhalt wird auf der Knotenmitte **zentriert** und aus Symbolgröße, Schriftgröße und
+diesen Abständen gerechnet — nicht mit festen Versätzen gesetzt. Verstreute Versätze waren der
+Grund, warum Symbol und Wert 1,4 px auseinanderstanden und auf dem Handy ineinanderliefen.
+
+Die Zeilenhöhe folgt daraus (Kreis + Beschriftung + zwei Untertitelzeilen + Luft). Zwei Zeilen,
+weil die Erzeugungs-Aufschlüsselung so viele braucht.
 
 ## Aufbau
 
