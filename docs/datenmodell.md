@@ -115,6 +115,9 @@ So additiv ergänzt:
   Erzeugungsknoten und rechnet sie nie in die Summe.
 - `anzeige.max_erwartete_leistung_w` — Obergrenze des Erwartungsbereichs für die
   Punktgeschwindigkeit. Fehlt sie, nimmt die Karte 5000 W an.
+- `anzeige.freigabe_ring_farbe` — CSS-Farbe des Rings um ein freigegebenes Gerät. Fehlt sie oder
+  ist sie leer, zeichnet die Karte den weißen Standardwert. Der graue gestrichelte Ring eines
+  gesperrten Geräts ist davon unabhängig fest verdrahtet.
 
 ## Migrationen
 

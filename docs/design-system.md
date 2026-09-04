@@ -11,10 +11,17 @@ Für dieses Projekt gilt **Home Assistant**, Akzent `#18BCF2` (eiserne Regel 10 
 [`../AGENTS.md`](../AGENTS.md)). Die Karte ist eine HA-Karte; eine andere Zuordnung stand nie zur
 Debatte.
 
-Der Akzent markiert **eine** Sache: Geräte, die das HEMS gerade regelt, bekommen einen Ring in
-dieser Farbe. Er trennt sie sichtbar von der übrigen Hauslast. Großflächig wird er nirgends
-eingesetzt — täte er das, wäre die Karte ein Skytech-Produkt in einem fremden Dashboard statt
-einer Karte, die dort dazugehört.
+Der Akzent markiert **eine** Sache: die Tastaturfokus-Kontur eines klickbaren Knotens. Großflächig
+wird er nirgends eingesetzt — täte er das, wäre die Karte ein Skytech-Produkt in einem fremden
+Dashboard statt einer Karte, die dort dazugehört.
+
+Getrennt davon steht der **Freigabe-Ring**: Geräte, die das HEMS gerade regelt, bekommen einen
+Ring in dieser Farbe, standardmäßig Weiß (`--spfc-freigabe-ring`). Er trennt sie sichtbar von der
+übrigen Hauslast. Anders als der Akzent ist er **je Anlage einstellbar** — im HEMS unter
+Flow-Card-Konfiguration, Feld `anzeige.freigabe_ring_farbe` im Vertrag. Leer bzw. fehlend ergibt
+den weißen Standardwert. Der graue gestrichelte Ring eines gesperrten Geräts bleibt davon
+unberührt, er ist fest auf `--spfc-unknown` verdrahtet — Zustand wird nie allein über Farbe
+transportiert, siehe „Zustände" unten.
 
 ## Hell und Dunkel
 
@@ -198,7 +205,7 @@ Der Hausspeicher und jeder AC-Speicher werden gleich gezeichnet:
   Messfehler ist.
 - Die Farbe folgt der Richtung: `--spfc-battery-in` beim Laden, `--spfc-battery` beim Entladen.
 
-Ein AC-Speicher trägt zusätzlich den **Akzentring** jedes HEMS-Geräts und, wenn er gerade nicht
+Ein AC-Speicher trägt zusätzlich den **Freigabe-Ring** jedes HEMS-Geräts und, wenn er gerade nicht
 mitregelt, den Grund als zweite Untertitelzeile.
 
 ## Zustände
@@ -208,7 +215,7 @@ zusätzlich Text, Form oder Symbol:
 
 | Zustand | Farbe | Zusätzlich |
 |---|---|---|
-| Gerät wird geregelt | Akzentring | durchgezogene Linie, Vorlesetext „vom HEMS geregelt" |
+| Gerät wird geregelt | Freigabe-Ring | durchgezogene Linie, Vorlesetext „vom HEMS geregelt" |
 | Gerät regelt nicht mit | grauer Ring | **gestrichelte** Linie, Grund als Untertitel am Knoten |
 | Wert unbekannt | — | `—` statt einer Zahl, **keine** Flusslinie |
 | Warnung am Kopf | Warnfarbe | Klartext im Abzeichen, z. B. „Geräteleistung übersteigt Hausleistung" |
