@@ -11,6 +11,13 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- **Der Ring eines freigegebenen Geräts ist jetzt standardmäßig weiß statt türkis.** Seine Farbe
+  lässt sich in der Flow-Card-Konfiguration im Skytech HEMS je Anlage anpassen; ohne Angabe bleibt
+  es beim weißen Standardwert. Der graue gestrichelte Ring eines gesperrten Geräts ist davon nicht
+  betroffen.
+
 ## [0.3.0] — 27.08.2026
 
 ### Geändert

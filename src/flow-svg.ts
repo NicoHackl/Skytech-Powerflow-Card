@@ -138,9 +138,11 @@ export function hausRing(knoten: Knoten, anteile: HausAnteil[]): SVGTemplateResu
   `
 }
 
-/** Der Akzentring markiert ein Gerät, das gerade vom HEMS geregelt wird.
-    Zustand nie allein über Farbe: ein ruhendes Gerät bekommt zusätzlich eine
-    gestrichelte Linie und einen Untertitel. */
+/** Der Freigabe-Ring markiert ein Gerät, das gerade vom HEMS geregelt wird.
+    Seine Farbe kommt aus `--spfc-freigabe-ring` (Standard Weiß, im HEMS
+    einstellbar über `anzeige.freigabe_ring_farbe`). Zustand nie allein über
+    Farbe: ein ruhendes Gerät bekommt zusätzlich eine gestrichelte Linie und
+    einen Untertitel, fest in `--spfc-unknown`. */
 export function akzentRing(knoten: Knoten, aktiv: boolean): SVGTemplateResult {
   return svg`
     <circle

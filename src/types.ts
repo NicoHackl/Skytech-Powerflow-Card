@@ -30,6 +30,10 @@ export interface Anzeige {
   /** Obergrenze des Erwartungsbereichs für die Punktgeschwindigkeit. Additiv
       ergänzt; fehlt sie, nimmt die Karte einen Standardwert an. */
   max_erwartete_leistung_w?: number
+  /** CSS-Farbe des Freigabe-Rings eines freigegebenen Geräts. Additiv ergänzt;
+      leer oder fehlend = der weiße Standardwert. Der graue gestrichelte Ring
+      eines gesperrten Geräts bleibt davon unberührt. */
+  freigabe_ring_farbe?: string
 }
 
 export interface Batterie {

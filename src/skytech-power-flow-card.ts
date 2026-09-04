@@ -464,6 +464,7 @@ export class SkytechPowerFlowCard extends LitElement {
     const geraete = new Map((config.devices ?? []).map((device) => [device.id, device]))
     const reihenfolge = new Map(bilanz.geraete.map((geraet, index) => [geraet.id, index]))
     const fluesse = new Map(bilanz.geraete.map((geraet) => [geraet.id, geraet]))
+    const ringFarbeRoh = config.anzeige?.freigabe_ring_farbe || ''
 
     return geometrie.knoten.map((knoten) => {
       switch (knoten.art) {
@@ -528,13 +529,14 @@ export class SkytechPowerFlowCard extends LitElement {
         case 'speicher': {
           const eintrag = bilanz.speicher.find((s) => s.id === knoten.id)
           return this._zeichneSpeicher(
-            geometrie, knoten, geraete.get(knoten.id), eintrag, status, schwelle)
+            geometrie, knoten, geraete.get(knoten.id), eintrag, status, schwelle, ringFarbeRoh)
         }
         default: {
           const device = geraete.get(knoten.id)
           const index = reihenfolge.get(knoten.id) ?? 0
           return this._zeichneGeraet(
-            geometrie, knoten, device, fluesse.get(knoten.id)?.leistung, status, index, schwelle)
+            geometrie, knoten, device, fluesse.get(knoten.id)?.leistung, status, index, schwelle,
+            ringFarbeRoh)
         }
       }
     })
@@ -621,6 +623,7 @@ export class SkytechPowerFlowCard extends LitElement {
   private _zeichneSpeicher(
     geometrie: Geometrie, knoten: Knoten, device: Device | undefined,
     eintrag: SpeicherFluss | undefined, status: FlowStatus | null, schwelle: number,
+    ringFarbeRoh: string,
   ): SVGTemplateResult {
     const soc = ladestand(this._hass, device?.soc_entity)
     const statusEintrag = device ? status?.devices?.[device.id] : undefined
@@ -648,6 +651,7 @@ export class SkytechPowerFlowCard extends LitElement {
       }],
       ring: socRing(knoten, soc),
       ringElement: akzentRing(knoten, aktiv),
+      ringFarbeRoh,
       untertitel,
       zusatz: [
         laedt ? 'lädt' : speist ? 'speist ins Haus' : '',
@@ -663,7 +667,7 @@ export class SkytechPowerFlowCard extends LitElement {
   private _zeichneGeraet(
     geometrie: Geometrie, knoten: Knoten, device: Device | undefined,
     wert: Aufloesung | undefined, status: FlowStatus | null,
-    index: number, schwelle: number,
+    index: number, schwelle: number, ringFarbeRoh: string,
   ): SVGTemplateResult {
     const eintrag = device ? status?.devices?.[device.id] : undefined
     // Fehlt die Statusentität, gilt jedes Gerät aus devices[] als geregelt —
@@ -680,6 +684,7 @@ export class SkytechPowerFlowCard extends LitElement {
       leitEntitaet: device?.power_entity || device?.switch_entity,
       ziel: device?.navigation,
       ringElement: akzentRing(knoten, aktiv),
+      ringFarbeRoh,
       untertitel: grund,
       zusatz: aktiv ? 'vom HEMS geregelt' : grund,
       schwelle,
@@ -692,6 +697,7 @@ export class SkytechPowerFlowCard extends LitElement {
     const ziel = istSicheresZiel(teil.ziel) ? teil.ziel! : ''
     const klickbar = Boolean(ziel || teil.leitEntitaet)
     const farbe = teil.farbeRoh || `var(${teil.farbe})`
+    const ringFarbe = teil.ringFarbeRoh ? `; --spfc-freigabe-ring: ${teil.ringFarbeRoh}` : ''
     const inhalt = knotenInhalt(mass, teil.werte.length)
 
     const symbolY = knoten.y + inhalt.symbolY
@@ -733,7 +739,7 @@ export class SkytechPowerFlowCard extends LitElement {
     return svg`
       <g
         class=${`knoten${klickbar ? ' klickbar' : ''}`}
-        style=${`color: ${farbe}`}
+        style=${`color: ${farbe}${ringFarbe}`}
         role=${klickbar ? (ziel ? 'link' : 'button') : 'group'}
         tabindex=${klickbar ? '0' : nothing}
         aria-label=${beschreibung}
@@ -882,6 +888,10 @@ interface KnotenTeil {
   schwelle: number
   /** Vom Benutzer im HEMS gesetzte Farbe. Sie schlägt die Palette. */
   farbeRoh?: string
+  /** Vom Benutzer im HEMS gesetzte Farbe des Freigabe-Rings. Leer = weißer
+      Standardwert aus dem Token. Wirkt nur auf den aktiven Ring — der graue
+      gestrichelte Ring eines gesperrten Geräts setzt seine Farbe fest. */
+  ringFarbeRoh?: string
   leitEntitaet?: string
   /** Dashboard-Ansicht, auf die ein Klick springt. Leer = More-Info-Dialog. */
   ziel?: string

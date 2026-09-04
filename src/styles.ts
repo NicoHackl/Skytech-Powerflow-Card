@@ -23,6 +23,10 @@ export const styles = css`
     --spfc-house:       var(--energy-non-fossil-color, #0f9d58);
 
     --spfc-accent:  #18bcf2;
+    /* Freigabe-Ring eines geregelten Geräts, getrennt vom Akzent: Der Akzent
+       bleibt die feste HA-Farbe für die Tastaturfokus-Kontur, der Freigabe-Ring
+       ist im HEMS pro Anlage einstellbar (Feld anzeige.freigabe_ring_farbe). */
+    --spfc-freigabe-ring: #ffffff;
     --spfc-unknown: var(--disabled-text-color, #bdbdbd);
     --spfc-warn:    var(--warning-color, #ff9800);
 
@@ -127,7 +131,7 @@ export const styles = css`
 
   .knoten-ring {
     fill: none;
-    stroke: var(--spfc-accent);
+    stroke: var(--spfc-freigabe-ring);
     stroke-width: 2;
   }
 
