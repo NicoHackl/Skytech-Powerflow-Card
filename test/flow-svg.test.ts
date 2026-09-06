@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { fliesst, punktDauer, DAUER_RASTER_S, DAUER_SCHNELL_S, DAUER_LANGSAM_S } from '../src/flow-svg'
+import {
+  fliesst, kantenFarbe, punktDauer, DAUER_RASTER_S, DAUER_SCHNELL_S, DAUER_LANGSAM_S,
+} from '../src/flow-svg'
 
 /* Bewegung. Der Kern dieser Tests: die Punktdauer darf NICHT davon abhängen,
    was gerade anderswo in der Anlage passiert. Genau daran lag es, dass die
@@ -55,5 +57,19 @@ describe('Fließt eine Kante?', () => {
     expect(fliesst(undefined)).toBe(false)
     expect(fliesst(Number.NaN)).toBe(false)
     expect(fliesst(Number.POSITIVE_INFINITY)).toBe(false)
+  })
+})
+
+/* Farbe. Der Kreis eines Geräts und die Linie, die zu ihm läuft, sind
+   dasselbe Ding — sie dürfen nie verschiedene Farben tragen. */
+
+describe('Kantenfarbe', () => {
+  test('ohne Gerätefarbe gilt das Token', () => {
+    expect(kantenFarbe({ farbe: '--spfc-geraet-1' })).toBe('var(--spfc-geraet-1)')
+    expect(kantenFarbe({ farbe: '--spfc-geraet-1', farbeRoh: '' })).toBe('var(--spfc-geraet-1)')
+  })
+
+  test('die im HEMS gesetzte Gerätefarbe schlägt die Palette', () => {
+    expect(kantenFarbe({ farbe: '--spfc-geraet-1', farbeRoh: '#146dc7' })).toBe('#146dc7')
   })
 })

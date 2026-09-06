@@ -30,6 +30,10 @@ export interface Kante {
   wert: number
   /** CSS-Variable der Flussfarbe, z. B. `--spfc-pv`. */
   farbe: string
+  /** Vom Benutzer im HEMS gesetzte Farbe des Geräts (`devices[].farbe`). Sie
+      schlägt die Palette — sonst trüge der Kreis eine andere Farbe als die
+      Linie, die zu ihm läuft. Leer = die Variable aus `farbe` gilt. */
+  farbeRoh?: string
   beschreibung: string
   /** Spaltenabstand der Geometrie. Bestimmt, wie weit der senkrechte Lauf von
       der Quelle abrückt. */
@@ -51,17 +55,29 @@ export function fliesst(wert: number | null | undefined): boolean {
   return typeof wert === 'number' && Number.isFinite(wert) && Math.abs(wert) >= FLUSS_SCHWELLE_W
 }
 
+/** Die Farbe einer Kante: die im HEMS gesetzte Gerätefarbe, sonst das Token.
+
+    Dieselbe Vorrangregel wie am Knoten (`KnotenTeil.farbeRoh`) — beide Stellen
+    müssen dieselbe Antwort geben, sonst hat ein Gerät zwei Farben. */
+export function kantenFarbe(kante: Pick<Kante, 'farbe' | 'farbeRoh'>): string {
+  return kante.farbeRoh || `var(${kante.farbe})`
+}
+
 /** Eine Kante. Strichbreite ist immer 1 — `non-scaling-stroke` hält sie auch
-    dann bei einem Bildschirmpunkt, wenn die Karte skaliert wird. */
+    dann bei einem Bildschirmpunkt, wenn die Karte skaliert wird.
+
+    Die Farbe steht am `<g>`, nicht am Pfad: Linie und Laufpunkt erben sie
+    beide über `currentColor`. */
 export function zeichneKante(
   kante: Kante, animation: boolean, minLeistung: number, maxLeistung: number, index: number,
 ): SVGTemplateResult {
   const pfad = kantenPfad(kante.von, kante.nach, kante.spalte)
   const id = `spfc-kante-${index}`
   const aktiv = fliesst(kante.wert)
+  const farbe = kantenFarbe(kante)
 
   return svg`
-    <g style=${`color: var(${kante.farbe})`} aria-hidden="true">
+    <g style=${`color: ${farbe}`} aria-hidden="true">
       <path
         id=${id}
         class=${`kante${aktiv ? '' : ' ruhend'}`}
