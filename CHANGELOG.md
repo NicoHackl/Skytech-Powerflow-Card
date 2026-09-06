@@ -11,6 +11,13 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+### Behoben
+
+- **Die Flusslinie zu einem Gerät hat jetzt dieselbe Farbe wie das Gerät selbst.** Wer im Skytech
+  HEMS eine eigene Gerätefarbe hinterlegt, bekam sie bisher nur am Kreis zu sehen — die Linie
+  dorthin blieb bei der Farbe, die die Karte selbst vergibt. Ein blau eingestellter Heizstab hing
+  so an einer gelben Linie. Ohne eigene Gerätefarbe ändert sich nichts.
+
 ### Geändert
 
 - **Der Ring eines freigegebenen Geräts ist jetzt standardmäßig weiß statt türkis.** Seine Farbe

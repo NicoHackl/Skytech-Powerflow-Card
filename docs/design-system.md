@@ -193,7 +193,11 @@ Geometrie** — Pfadangaben, Strichbreiten, Positionen, Radien. Sie stehen im SV
 Renderlauf ändern; eine CSS-Klasse dafür gäbe es nicht.
 
 Die einzige Ausnahme bei Farbe ist `devices[].farbe`: der Benutzer trägt sie im HEMS-Panel ein,
-sie kann deshalb nicht als Token vorliegen. Sie wirkt nur auf den Rand des betreffenden Knotens.
+sie kann deshalb nicht als Token vorliegen. Sie schlägt die zyklische Palette und wirkt auf **den
+ganzen Knoten samt seiner Kante** — Rand, Symbol, Wert, Flusslinie und Laufpunkt. Eine Kante nur
+aus der Palette zu färben ergäbe einen blauen Kreis am Ende einer gelben Linie; Kreis und Linie
+sind aber dasselbe Gerät. Nicht betroffen ist der Freigabe-Ring: der hat mit
+`anzeige.freigabe_ring_farbe` sein eigenes Feld.
 
 ## Speicherknoten
 

@@ -383,7 +383,7 @@ export class SkytechPowerFlowCard extends LitElement {
       breite: this._breite,
     })
 
-    const kanten = this._kanten(geometrie, bilanz, schwelle, hausKnoten)
+    const kanten = this._kanten(geometrie, config, bilanz, schwelle, hausKnoten)
     const animation = anzeige.animation !== false
     const maxLeistung = anzeige.max_erwartete_leistung_w ?? STANDARD_MAX_LEISTUNG_W
 
@@ -407,7 +407,8 @@ export class SkytechPowerFlowCard extends LitElement {
       der Grafik soll stehen bleiben, statt bei jedem Nulldurchgang zu
       verschwinden. Weggelassen wird nur, was es gar nicht gibt. */
   private _kanten(
-    geometrie: Geometrie, bilanz: Bilanz, schwelle: number, hausKnoten: boolean,
+    geometrie: Geometrie, config: FlowConfig, bilanz: Bilanz, schwelle: number,
+    hausKnoten: boolean,
   ): Kante[] {
     const mitte = findeKnoten(geometrie, hausKnoten ? 'haus' : 'verteiler')
     const pv = findeKnoten(geometrie, 'pv')
@@ -416,13 +417,19 @@ export class SkytechPowerFlowCard extends LitElement {
     const kanten: Kante[] = []
     if (!mitte) return kanten
 
+    // Die im HEMS gesetzte Gerätefarbe schlägt die Palette — beim Knoten wie
+    // bei seiner Kante. Nur eine der beiden zu färben ließe Kreis und Linie
+    // als zwei verschiedene Dinge lesen.
+    const geraete = new Map((config.devices ?? []).map((device) => [device.id, device]))
+    const geraeteFarbe = (id: string): string => geraete.get(id)?.farbe || ''
+
     const anlegen = (
       von: Knoten | undefined, nach: Knoten | undefined,
-      wert: number, farbe: string, was: string,
+      wert: number, farbe: string, was: string, farbeRoh = '',
     ) => {
       if (!von || !nach) return
       kanten.push({
-        von, nach, wert, farbe, spalte: geometrie.spalte,
+        von, nach, wert, farbe, farbeRoh, spalte: geometrie.spalte,
         beschreibung: `${was} ${leistung(wert, schwelle)}`,
       })
     }
@@ -439,16 +446,17 @@ export class SkytechPowerFlowCard extends LitElement {
     // wie beim Hausspeicher wäre erfunden.
     for (const eintrag of bilanz.speicher) {
       const knoten = findeKnoten(geometrie, eintrag.id)
+      const farbeRoh = geraeteFarbe(eintrag.id)
       if (eintrag.entladen > 0) {
-        anlegen(knoten, mitte, eintrag.entladen, '--spfc-battery', 'Speicher ins Haus')
+        anlegen(knoten, mitte, eintrag.entladen, '--spfc-battery', 'Speicher ins Haus', farbeRoh)
       } else {
-        anlegen(mitte, knoten, eintrag.laden, '--spfc-battery-in', 'Haus in den Speicher')
+        anlegen(mitte, knoten, eintrag.laden, '--spfc-battery-in', 'Haus in den Speicher', farbeRoh)
       }
     }
 
     bilanz.geraete.forEach((geraet, index) => {
       anlegen(mitte, findeKnoten(geometrie, geraet.id), geraet.fluss,
-        GERAETE_FARBEN[index % GERAETE_FARBEN.length]!, 'Gerät')
+        GERAETE_FARBEN[index % GERAETE_FARBEN.length]!, 'Gerät', geraeteFarbe(geraet.id))
     })
     anlegen(mitte, findeKnoten(geometrie, 'rest'), bilanz.uebrigesHaus,
       '--spfc-house', 'Übriges Haus')
