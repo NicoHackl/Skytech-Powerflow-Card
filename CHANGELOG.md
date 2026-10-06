@@ -11,6 +11,12 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+### Dokumentation — 06.10.2026
+
+- Gemeinsame Contract-Ablage mit einem Ordner je Projektpaar und aktualisierten Verweisen.
+- Vertragskopien auf den HEMS-Dokumentationsstand zu Zwang und frei wählbaren Icon-Sätzen abgeglichen.
+
+
 ### Behoben
 
 - **Die Flusslinie zu einem Gerät hat jetzt dieselbe Farbe wie das Gerät selbst.** Wer im Skytech

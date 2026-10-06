@@ -1,5 +1,7 @@
 # Dokumentation — Skytech Power Flow Card
 
+Projektübergreifende Schnittstellen: [Vertragsübersicht](../contract/README.md).
+
 Ausführliche technische Referenz. Die **verbindlichen Regeln** stehen nicht hier, sondern in
 [`AGENTS.md`](../AGENTS.md) im Repo-Root. Bei Widerspruch gilt `AGENTS.md`.
 

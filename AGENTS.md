@@ -123,7 +123,7 @@ passende Datei lesen, statt zu raten:
 | [docs/design-entscheidungen.md](docs/design-entscheidungen.md) | Entscheidungs-Log — Quelle der Wahrheit fürs „warum" |
 | [docs/konfiguration.md](docs/konfiguration.md) | Env-Variablen, Config-Optionen, Secrets-Handhabung |
 | [docs/datenmodell.md](docs/datenmodell.md) | Der Datenvertrag zum Skytech HEMS und wie die Karte ihn liest |
-| [vertrag_powerflow_card_hems/kontrakt.md](vertrag_powerflow_card_hems/kontrakt.md) | **Der Datenvertrag selbst — autoritativ für jedes Feld** |
+| [contract/contract_powerflow_card_hems/kontrakt.md](contract/contract_powerflow_card_hems/kontrakt.md) | **Der Datenvertrag selbst — autoritativ für jedes Feld** |
 | [docs/sicherheit-datenschutz.md](docs/sicherheit-datenschutz.md) | Secrets, personenbezogene Daten, externe Dienste |
 | [docs/bekannte-luecken.md](docs/bekannte-luecken.md) | Abweichungen Spec ↔ Code, Stolpersteine, offene Bugs |
 | [docs/roadmap.md](docs/roadmap.md) | Meilensteine und Umsetzungsstand |

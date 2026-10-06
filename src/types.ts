@@ -1,6 +1,6 @@
 /* Der Datenvertrag zum Skytech HEMS als TypeScript-Typen.
 
-   Autoritativ ist vertrag_powerflow_card_hems/kontrakt.md — bei jeder
+   Autoritativ ist contract/contract_powerflow_card_hems/kontrakt.md — bei jeder
    Abweichung gilt der Vertrag, nicht diese Datei. Die Feldnamen werden
    deshalb wortgleich übernommen, auch wo sie deutsch sind (`anzeige`,
    `farbe`, `reihenfolge`, `leistung_w`).

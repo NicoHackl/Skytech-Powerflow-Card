@@ -6,7 +6,7 @@ Vertrag zum Skytech HEMS.
 ## Der Datenvertrag
 
 Autoritativ für jedes Feld, jeden Vorzeichenbegriff und jede Rückfallregel:
-[`vertrag_powerflow_card_hems/kontrakt.md`](../vertrag_powerflow_card_hems/kontrakt.md).
+[`contract/contract_powerflow_card_hems/kontrakt.md`](../contract/contract_powerflow_card_hems/kontrakt.md).
 
 Die Datei liegt **wortgleich** auch im HEMS-Repository. Bei Widerspruch zwischen ihr und einer
 Beschreibung hier gilt sie, nicht diese Datei. Ihre TypeScript-Entsprechung steht in
@@ -127,7 +127,7 @@ So additiv ergänzt:
 Es gibt kein Schema, das migriert werden müsste. Ändert sich der Vertrag, werden im **selben**
 Arbeitspaket geändert:
 
-1. `vertrag_powerflow_card_hems/kontrakt.md` — **in beiden Repositories wortgleich**
+1. `contract/contract_powerflow_card_hems/kontrakt.md` — **in beiden Repositories wortgleich**
 2. `src/types.ts` und die auswertenden Stufen
 3. diese Datei
 4. die betroffenen Tests

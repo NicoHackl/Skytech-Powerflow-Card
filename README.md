@@ -99,7 +99,7 @@ npm run build      # erzeugt genau eine Datei: dist/skytech-power-flow-card.js
 ```
 
 Der Datenvertrag zum HEMS liegt in
-[`vertrag_powerflow_card_hems/kontrakt.md`](vertrag_powerflow_card_hems/kontrakt.md) und ist für
+[`contract/contract_powerflow_card_hems/kontrakt.md`](contract/contract_powerflow_card_hems/kontrakt.md) und ist für
 jedes Feld autoritativ. Er liegt wortgleich auch im HEMS-Repository; geändert wird er nur additiv
 (siehe [`docs/design-entscheidungen.md`](docs/design-entscheidungen.md)).
 
