@@ -15,6 +15,7 @@ Datei angefasst wurde.
 
 - Gemeinsame Contract-Ablage mit einem Ordner je Projektpaar und aktualisierten Verweisen.
 - Vertragskopien auf den HEMS-Dokumentationsstand zu Zwang und frei wählbaren Icon-Sätzen abgeglichen.
+- Regel zur Pflege projektübergreifender Verträge in `AGENTS.md` verankert, damit KI-Assistenten sie automatisch beachten.
 
 
 ### Behoben
