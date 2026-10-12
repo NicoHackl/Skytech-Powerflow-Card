@@ -11,6 +11,13 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+### Dokumentation — 12.10.2026
+
+- Kartenvertrag an den Anlagenstand angepasst: Der Batterieknoten ist für einen Speicher gedacht,
+  den das HEMS nicht regelt. Ein vom HEMS geregelter Speicher – in der Referenzanlage inzwischen
+  auch der E3DC (HEMS D-063) – erscheint als Gerät. Das Beispiel mit selbstregelndem E3DC bleibt
+  als Beispiel gekennzeichnet stehen. Keine Änderung an Feldern oder Verhalten.
+
 ### Dokumentation — 06.10.2026
 
 - Gemeinsame Contract-Ablage mit einem Ordner je Projektpaar und aktualisierten Verweisen.
