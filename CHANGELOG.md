@@ -11,6 +11,12 @@ Datei angefasst wurde.
 
 ## [Unveröffentlicht]
 
+### Dokumentation — 20.10.2026
+
+- Grundsatz der Skytech-Projekte in `contract/README.md` ergänzt: Jede Einheit, die anderen über
+  Home Assistant etwas mitteilt, veröffentlicht dafür genau eine Entität
+  `sensor.<einheit>_schnittstelle`. Die Flow-Card-Sensoren `sensor.skytech_hems_flow_config` und `sensor.skytech_hems_flow_status` sind als Ausnahme dokumentiert und bleiben unverändert; für die Karte ändert sich nichts.
+
 ### Dokumentation — 12.10.2026
 
 - Kartenvertrag an den Anlagenstand angepasst: Der Batterieknoten ist für einen Speicher gedacht,
