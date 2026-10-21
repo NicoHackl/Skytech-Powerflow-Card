@@ -52,3 +52,10 @@ verhält sich auch dann noch richtig, wenn etwas ausfällt.
 Beschlossen, aber noch nicht gebaut → hier mit Status `offen`.
 Gebaut, aber abweichend von der Doku → [bekannte-luecken.md](bekannte-luecken.md).
 Warum so entschieden → [design-entscheidungen.md](design-entscheidungen.md).
+
+## EVMS-Vorbereitung
+
+HEMS-Watt-Ladeziele behalten den bestehenden Kartentyp; Istwerte kommen bei fehlendem
+separaten Sensorverweis aus dem HEMS-Status. Kein neuer Karten-Regelweg.
+[Vertrag](../contract/contract_powerflow_card_hems/kontrakt.md), Live-Abnahme nach
+Implementierung der Gegenstellen und Lieferung der go-e.

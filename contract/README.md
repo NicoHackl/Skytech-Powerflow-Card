@@ -51,3 +51,10 @@ Dokumentierte Ausnahmen:
 | Gegenstelle | Vertrag | Stand / Hinweise |
 |---|---|---|
 | HEMS | [kontrakt.md](contract_powerflow_card_hems/kontrakt.md) | Kartenvertrag; plan-card.md und plan-hems.md liegen im selben Ordner. |
+
+## EVMS-Vorbereitung — 21.10.2026
+
+Die HEMS-Erweiterung für Watt-Ladeziele ist im bestehenden Paarvertrag dokumentiert.
+EVMS bleibt eine gesonderte geplante Einheit; keine zusätzliche direkte Schnittstelle
+in diesem Repository. HEMS behält den Speicher-State seiner Schnittstelle und ergänzt
+Ladeziel-Bestätigungen additiv; Bestandsverträge bleiben kompatibel.
